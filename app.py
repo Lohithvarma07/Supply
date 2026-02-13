@@ -16,7 +16,7 @@ st.set_page_config(page_title="SupplySyncAI – MLOps UI", layout="wide")
 st.markdown("""
 <style>
 
-/* App background */
+/* App background #EDEDED*/
 .stApp {
     background-color: #EDEDED;
     margin: 0;
@@ -56,6 +56,8 @@ header[data-testid="stHeader"] {
 header[data-testid="stHeader"] * {
     color: #000000 !important;
 }
+
+
 
 </style>
 """, unsafe_allow_html=True)

@@ -59,13 +59,27 @@ def render_html_table(
 
             .table-container {{
                 max-height: {final_height}px;
-                overflow-y: auto;
-                overflow-x: auto;
+                overflow: hidden; 
                 border-radius: 18px;
                 border: 1px solid #E5E7EB;
                 box-shadow: 0 6px 18px rgba(0,0,0,0.06);
                 background: white;
             }}
+
+            .dataTables_scroll {{
+    border-radius: 18px !important;
+    overflow: hidden !important;
+}}
+
+.dataTables_scrollBody {{
+    border-radius: 0 0 18px 18px !important;
+    overflow: auto !important;
+}}
+.dataTables_scrollHead {{
+    border-radius: 18px 18px 0 0 !important;
+    overflow: hidden !important;
+}}
+
 
             table.dataTable {{
                 width: 100% !important;
@@ -132,7 +146,10 @@ def render_html_table(
             .dataTables_wrapper {{
                 margin: 0 !important;
                 padding: 0 !important;
+                border-radius: 18px !important;  
+                overflow: hidden !important; 
             }}
+            
 
         </style>
     </head>
@@ -146,15 +163,16 @@ def render_html_table(
         <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 
         <script>
-            $(document).ready(function() {{
-                $('#formalTable').DataTable({{
-                    paging: false,
-                    ordering: true,
-                    searching: false,
-                    info: false,
-                    scrollX: true
-                }});
-            }});
+            $('#formalTable').DataTable({{
+    paging: false,
+    ordering: true,
+    searching: false,
+    info: false,
+    scrollX: true,
+    scrollY: "{final_height - 60}px",
+    scrollCollapse: true
+}});
+
         </script>
     </body>
     </html>
