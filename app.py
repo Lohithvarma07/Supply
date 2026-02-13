@@ -18,30 +18,48 @@ st.markdown("""
 
 /* App background */
 .stApp {
-    background-color: #FFFFFF;
+    background-color: #EDEDED;
     margin: 0;
     padding: 0;
 }
 
-/* 🔥 Remove ALL app-level top spacing */
+/* Remove block spacing */
 .block-container {
     padding-top: 0rem !important;
-    margin-top: 0rem !important;
+    margin-top: -5.5rem !important;
 }
 
-/* 🔥 Remove internal main section padding */
+/* Remove main section spacing */
 section.main > div:first-child {
     padding-top: 0rem !important;
     margin-top: 0rem !important;
 }
 
-/* ✅ KEEP header visible (do NOT hide it) */
-header {
+/* 🔥 REMOVE TOP GAP COMPLETELY */
+[data-testid="stAppViewContainer"] {
+    padding-top: 0rem !important;
+    margin-top: 0rem !important;
+}
+
+/* 🔥 REMOVE TOP SPACER DIV */
+[data-testid="stAppViewContainer"] > div:first-child {
+    margin-top: 0rem !important;
+    padding-top: 0rem !important;
+}
+
+/* KEEP header visible */
+header[data-testid="stHeader"] {
     position: relative;
+    background-color: #EDEDED !important;
+}
+
+header[data-testid="stHeader"] * {
+    color: #000000 !important;
 }
 
 </style>
 """, unsafe_allow_html=True)
+
 
 st.markdown("""
 <style>
@@ -59,7 +77,7 @@ div.stRadio {
    Teal WRAP BOX – FULL PAGE WIDTH
    ========================================= */
 div.stRadio > div {
-    background-color:  #0D9488;
+    background-color: #00D05E;
     padding: 16px 400px;
     border-radius: 8px;
     width: 100%;              
@@ -74,16 +92,11 @@ div[data-baseweb="radio-group"] {
     justify-content: center;  /* center options inside */
 }
 
-/* =========================================
-   RADIO OPTION TEXT
-   ========================================= */
-/* RADIO LABEL TEXT – FORCE WHITE */
-div[data-baseweb="radio"] label,
-div[data-baseweb="radio"] label span {
-    font-size: 18px !important;
-    font-weight: 800 !important;
-    color: #FFFFFF !important;
+/* FORCE RADIO TEXT WHITE */
+div.stRadio div[data-baseweb="radio"] * {
+    color: #000000 !important;
 }
+
 
 
 /* =========================================
@@ -92,6 +105,8 @@ div[data-baseweb="radio"] label span {
 div[data-baseweb="radio"] {
     margin-right: 28px;
 }
+
+            
 
           
 
@@ -163,7 +178,7 @@ st.markdown("""
 .summary-card {
     border: 2px solid #6B7280;
     border-radius: 2px;
-    background-color: #E5E7EB;
+    background-color: #F8FAFC;
     overflow: hidden;
     text-align: center;
 }
@@ -172,8 +187,8 @@ st.markdown("""
    HEADER ROW (NO WRAP, SAME HEIGHT)
    ========================================= */
 .summary-title {
-    background-color: #9CA3AF;
-    color: #000000;
+    background-color:#1F3A5F;
+    color: #ffffff;
     font-size: 14px;
     font-weight: 700;
     padding: 8px 6px;
@@ -3200,7 +3215,7 @@ elif eda_option == "Sales Channel Analysis":
             channel_finance["total_profit"],
             width,
             label="Total Profit",
-            color="#0A6849"
+            color="#1060D0"
         )
 
         ax4.set_xticks(x)
@@ -3531,7 +3546,7 @@ elif eda_option == "Promotion Effectiveness":
             promo_compare["uplift_revenue"],
             width,
             label="Uplift Revenue",
-            color="#10B981"
+            color="#0863BD"
         )
 
         ax.set_xticks(x)
@@ -3797,7 +3812,7 @@ elif eda_option == "Event Impact Analysis":
             top_events["sales_after"],
             width,
             label="Sales After Event",
-            color="#649283"
+            color="#3B6E8E"
         )
 
         ax.set_xticks(x)

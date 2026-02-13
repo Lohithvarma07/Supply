@@ -6,19 +6,19 @@ import streamlit.components.v1 as components
 def render_html_table(
     df: pd.DataFrame,
     title: str | None = None,
-    max_height: int = 350
+    max_height: int = 300   # 🔥 cap for large tables
 ):
     if df is None or df.empty:
         st.info("No data to display.")
         return
 
     if title:
-        st.markdown(f"### {title}")
+        st.markdown(f"### 📋 {title}")
 
-    # ---------- AUTO HEIGHT (Adjusted for Bigger Rows) ----------
-    ROW_HEIGHT = 40
-    HEADER_HEIGHT = 60
-    PADDING = 30
+    # ---------- AUTO HEIGHT CALCULATION ----------
+    ROW_HEIGHT = 32
+    HEADER_HEIGHT = 44
+    PADDING = 20
 
     rows = len(df)
     calculated_height = HEADER_HEIGHT + (rows * ROW_HEIGHT) + PADDING
@@ -26,8 +26,8 @@ def render_html_table(
 
     table_html = df.to_html(
         index=False,
-        classes="display",
-        table_id="formalTable",
+        classes="display compact",
+        table_id="stickyTable",
         escape=False
     )
 
@@ -37,90 +37,54 @@ def render_html_table(
         <link rel="stylesheet"
               href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-
         <style>
-
-            :root {{
-                --header-bg: #1F3A5F;
-                --header-text: #FFFFFF;
-                --row-odd: #E6F0FF;
-                --row-even: #F8FAFC;
-                --row-hover: #D3E2F5;
-                --row-divider: #EEF2F7;
-            }}
-
-            body {{
-                margin: 0;
-                padding: 0;
-                font-family: 'Inter', sans-serif;
-                background: transparent;
-            }}
-
             .table-container {{
                 max-height: {final_height}px;
                 overflow-y: auto;
                 overflow-x: auto;
-                border-radius: 18px;
-                border: 1px solid #E5E7EB;
-                box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-                background: white;
+                border: none;
+                margin: 0;
+                padding: 0;
             }}
 
             table.dataTable {{
                 width: 100% !important;
-                font-size: 13px;                /* Bigger font */
+                font-size: 13.5px;
                 border-collapse: collapse;
                 border: none !important;
             }}
 
-            /* Remove sorted column highlight */
-            table.dataTable.display tbody tr > .sorting_1,
-            table.dataTable.display tbody tr > .sorting_2,
-            table.dataTable.display tbody tr > .sorting_3 {{
-                background: inherit !important;
-            }}
-
-            /* HEADER */
             table.dataTable thead th {{
                 position: sticky;
                 top: 0;
-                background: var(--header-bg);
-                color: var(--header-text);
+                background-color: #F3F4F6;
                 font-weight: 600;
                 text-align: center !important;
-                padding: 16px 14px;            /* Bigger header padding */
-                font-size: 13px;
+                color: #1F2937;
+                padding: 12px 8px;
+                border-bottom: 1px solid #D1D5DB;
                 white-space: nowrap;
-                letter-spacing: 0.3px;
             }}
 
-            /* BODY CELLS */
             table.dataTable td {{
-                padding: 14px 14px;            /* Bigger rows */
-                border-bottom: 1px solid var(--row-divider);
-                text-align: center !important;
+                padding: 3px 5px;
+                border-bottom: 1px solid #E5E7EB;
                 white-space: nowrap;
-            }}
-
-            /* Zebra */
-            table.dataTable tbody tr:nth-child(odd) {{
-                background-color: var(--row-odd);
-            }}
-
-            table.dataTable tbody tr:nth-child(even) {{
-                background-color: var(--row-even);
-            }}
-
-            table.dataTable tbody tr:hover {{
-                background-color: var(--row-hover);
-                transition: background 0.2s ease;
+                text-align: center !important;
             }}
 
             table.dataTable th,
             table.dataTable td {{
                 border-left: none !important;
                 border-right: none !important;
+            }}
+
+            table.dataTable tbody tr:nth-child(even) {{
+                background-color: #EEF2F7;
+            }}
+
+            table.dataTable tbody tr:hover {{
+                background-color: #E5EDFF;
             }}
 
             .dataTables_filter,
@@ -133,7 +97,6 @@ def render_html_table(
                 margin: 0 !important;
                 padding: 0 !important;
             }}
-
         </style>
     </head>
 
@@ -147,7 +110,7 @@ def render_html_table(
 
         <script>
             $(document).ready(function() {{
-                $('#formalTable').DataTable({{
+                $('#stickyTable').DataTable({{
                     paging: false,
                     ordering: true,
                     searching: false,
@@ -160,8 +123,9 @@ def render_html_table(
     </html>
     """
 
+    # 🔥 KEY FIXES HERE
     components.html(
         html,
         height=final_height,
-        scrolling=False
+        scrolling=False   # 🔥 prevent iframe scrollbar
     )
