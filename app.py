@@ -110,20 +110,30 @@ div.element-container:has(div.stRadio) {
    ========================================= */
 div.stRadio > div {
     background-color:  #00D05E;
-    padding: 16px 700px;
+    padding: 16px 0px;
     border-radius: 8px;
-    width: 100%;              
+    width: 100%;
     box-sizing: border-box;
+    display: flex;
+    justify-content: center;
 }
 
 /* =========================================
    RADIO GROUP ALIGNMENT
    ========================================= */
 div[data-baseweb="radio-group"] {
-    display: flex;
-    justify-content: center;  /* center options inside */
+    display: flex !important;
+    justify-content: center !important;
     align-items: center;
-    gap: 60px;  
+    gap: 50px;
+    width: 100%;
+    margin: 0 auto;
+}
+            
+div[data-baseweb="radio"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* =========================================
@@ -135,6 +145,7 @@ div[data-baseweb="radio"] label span {
     font-size: 18px !important;
     font-weight: 800 !important;
     color: #FFFFFF !important;
+    white-space: nowrap;
 }
 
 
@@ -1111,27 +1122,6 @@ st.markdown("""
     background-color: #F8F9F9;
 }
 
-
-/* =====================================================
-   EDA RADIO NAVIGATION (optional but safe)
-   ===================================================== */
-
-div[data-baseweb="radio-group"] {
-    background-color: #F8F9F9;
-    padding: 12px 16px;
-    border-radius: 10px;
-    border: 1px solid #E5E7E9;
-    margin-bottom: 18px;
-}
-
-div[data-baseweb="radio"] {
-    margin-right: 14px;
-}
-
-div[data-baseweb="radio"] input:checked + div {
-    font-weight: 600;
-    color: #2F75B5;
-}
 
 
 /* =====================================================
