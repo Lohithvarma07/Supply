@@ -8,7 +8,7 @@ import numpy as np
 from utils.html_table import render_html_table
 import streamlit as st
 import altair as alt
-
+from streamlit_option_menu import option_menu
 
 
 st.set_page_config(page_title="SupplySyncAI – MLOps UI", layout="wide")
@@ -27,6 +27,11 @@ st.markdown("""
 .block-container {
     padding-top: 0rem !important;
     margin-top: -5.5rem !important;
+    
+}
+/* keep app background */
+.main {
+    background-color: #f0f2f6 !important;
 }
 
 
@@ -66,71 +71,84 @@ header[data-testid="stHeader"] * {
 st.markdown("""
 <style>
 
-/* 🔥 FORCE TRUE FULL WIDTH */
+/* Block container — single source of truth */
 .block-container {
-    padding-left: 0rem !important;
-    padding-right: 0rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
     max-width: 100% !important;
+    overflow-x: hidden !important;
 }
 
-/* Remove side padding from main app container */
 section.main > div {
     padding-left: 0rem !important;
     padding-right: 0rem !important;
     max-width: 100% !important;
+    overflow-x: hidden !important;
 }
 
-/* Remove internal page padding */
 [data-testid="stAppViewContainer"] {
     padding-left: 0rem !important;
     padding-right: 0rem !important;
+    overflow-x: hidden !important;
 }
-
+            
 </style>
 """, unsafe_allow_html=True)
-
 
 st.markdown("""
 <style>
 
-/* Remove Streamlit inner padding */
-.block-container {
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
+/* =========================================
+   RADIO CONTAINER – FULL WIDTH
+   ========================================= */
+div.element-container:has(div.stRadio) {
+    width: 100% !important;
 }
 
-            
-/* Full width green background */
-div[data-testid="stRadio"] > div {
-    background-color: #00D05E;
-    padding: 16px 40px;
+/* =========================================
+   Teal WRAP BOX – FULL PAGE WIDTH
+   ========================================= */
+div.stRadio > div {
+    background-color:  #00D05E;
+    padding: 16px 700px;
     border-radius: 8px;
-    width: 100%;
+    width: 100%;              
     box-sizing: border-box;
 }
 
-/* THIS is the real fix */
+/* =========================================
+   RADIO GROUP ALIGNMENT
+   ========================================= */
 div[data-baseweb="radio-group"] {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: center !important;   /* center horizontally */
-    align-items: center !important;
-    width: 100% !important;
-    gap: 40px;
+    display: flex;
+    justify-content: center;  /* center options inside */
+    align-items: center;
+    gap: 60px;  
 }
 
+/* =========================================
+   RADIO OPTION TEXT
+   ========================================= */
+/* RADIO LABEL TEXT – FORCE WHITE */
+div[data-baseweb="radio"] label,
+div[data-baseweb="radio"] label span {
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    color: #FFFFFF !important;
+}
+
+
+/* =========================================
+   SPACE BETWEEN OPTIONS
+   ========================================= */
 div[data-baseweb="radio"] {
-    margin: 0 !important;
+    margin-right: 28px;
 }
 
-div[data-baseweb="radio"] * {
-    color: black !important;
-}
+          
 
 </style>
 """, unsafe_allow_html=True)
-
-
 
 st.markdown(""" 
  <style> /* Expander outer card */ 
@@ -524,6 +542,7 @@ step = st.radio(
     label_visibility="collapsed"
 
 )
+
 
 
 # ============================================================
@@ -1274,6 +1293,9 @@ if df is None:
     st.warning("⚠ No dataset available.")
     st.stop()
 
+if "eda_completed" not in st.session_state:
+    st.session_state.eda_completed = False
+
 
 # ---------------- EDA HEADER ----------------
 st.markdown(
@@ -1425,6 +1447,8 @@ with st.expander(" ", expanded=True):
 
 
 eda_option = st.session_state.eda_option
+if eda_option is not None:
+    st.session_state.eda_completed = True
 st.markdown(
     "<div style='margin-top:6px'></div>",
     unsafe_allow_html=True
@@ -1432,7 +1456,6 @@ st.markdown(
 
 if eda_option is None:
     st.info("Select an analysis to view insights.")
-    st.stop()
 
 
 # ============================================================
@@ -3915,9 +3938,7 @@ elif eda_option == "Summary Report":
             color:white;
             font-size:16px;
             line-height:1.6;
-            margin-bottom:25px;
-            
-        ">
+            margin-bottom:25px;">
 
         <b>What this section does:</b>
 
@@ -4052,6 +4073,13 @@ st.write("")
 # STEP 4 – FEATURE ENGINEERING (TIME SERIES FOUNDATION)
 # ============================================================
 
+# ============================================================
+# LOCK FEATURE ENGINEERING UNTIL EDA
+# ============================================================
+
+if not st.session_state.eda_completed:
+    st.info("ℹ Please explore at least one EDA analysis to unlock Feature Engineering.")
+    st.stop()
 st.markdown(
     """
     <div style="
@@ -4082,7 +4110,6 @@ st.markdown(
         margin-bottom:20px;
     ">
 
-    <h3 style="margin-top:0;">Feature Engineering </h3>
 
     Feature Engineering is the foundation of building robust Machine Learning models. 
     It involves extracting meaningful variables from raw data and selecting the most 
@@ -4118,25 +4145,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.markdown(
-    """
-    <div style="
-        background-color:#18406F;
-        padding:24px;
-        border-radius:12px;
-        color:white;
-        font-size:16px;
-        line-height:1.6;
-        margin-bottom:20px;
-    ">
-    <h3>
-    Feature Selection </h3>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
+st.markdown("## Feature Selection")
 
 
 # ============================================================
@@ -4152,7 +4161,7 @@ from sklearn.ensemble import RandomForestRegressor
 
 st.markdown("""
 <div style="
-    background-color:#1F4E8C;
+    background-color:#00D05E;
     padding:20px;
     border-radius:12px;
     color:white;
@@ -4203,7 +4212,7 @@ Choose Feature Selection Approach
 
 # ---------------- SESSION STATE ----------------
 if "selection_mode" not in st.session_state:
-    st.session_state.selection_mode = "Manual"
+    st.session_state.selection_mode = "Automated"
 
 
 # ---------------- TILE BUTTON FUNCTION ----------------
@@ -4234,18 +4243,16 @@ def selection_tile(label):
 
 
 # ---------------- TILE CONTAINER ----------------
-with st.expander(" ", expanded=True):
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        selection_tile("Automated")
-
-    with col2:
-        selection_tile("Manual")
+selection_mode = st.radio(
+    "",
+    ["Automated", "Manual"],
+    horizontal=True,
+    key="selection_mode"
+)
 
 
 selection_mode = st.session_state.selection_mode
+
 
 # ============================================================
 # Manual
@@ -4253,15 +4260,56 @@ selection_mode = st.session_state.selection_mode
 
 if selection_mode == "Manual":
 
-    feature_columns = [col for col in df.columns if col != target_column]
+    feature_columns = [
+        col for col in df.select_dtypes(include=["int64", "float64"]).columns
+        if col != target_column and "id" not in col.lower() and "invoice" not in col.lower()
+    ]
 
-    selected_features = st.multiselect(
-        "Select Features Manually:",
+    # Initialize once
+    if "selected_features" not in st.session_state:
+        st.session_state["selected_features"] = feature_columns[:5]
+
+    # 🔥 Select All toggle
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("Select All"):
+            st.session_state["selected_features"] = feature_columns.copy()
+    with col2:
+        if st.button("Clear All"):
+            st.session_state["selected_features"] = []
+
+    # 🔥 Sort so selected appear on top
+    sorted_features = sorted(
         feature_columns,
-        default=feature_columns[:5]
+        key=lambda x: x not in st.session_state["selected_features"]
     )
 
-    # Save immediately to session
+    # Build selection dataframe
+    feature_df = pd.DataFrame({
+        "Select": [col in st.session_state["selected_features"] for col in sorted_features],
+        "Feature": sorted_features
+    })
+
+    st.markdown("### Select Features")
+    
+
+    edited_df = st.data_editor(
+        feature_df,
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        column_config={
+            "Select": st.column_config.CheckboxColumn(
+                width="small"
+            ),
+            "Feature": st.column_config.TextColumn(
+                width="large"
+            )
+        }
+    )
+
+    # Update selected features
+    selected_features = edited_df.loc[edited_df["Select"], "Feature"].tolist()
     st.session_state["selected_features"] = selected_features
 
     # ============================================================
@@ -4316,6 +4364,7 @@ else:
         st.stop()
 
 
+
     # ============================================================
     # FEATURE SELECTION METHODS (EDA STYLE TILES)
     # ============================================================
@@ -4323,16 +4372,16 @@ else:
     if selection_mode == "Automated":
 
         st.markdown("""
-        <div style="
-            background-color:#163A70;
-            padding:18px 25px;
-            border-radius:10px;
-            color:white;
-            margin-top:25px;
-            margin-bottom:15px;
-            font-size:18px;
-            font-weight:600;
-        ">
+<div style="
+    background-color:#163A70;
+    padding:20px;
+    border-radius:12px;
+    color:white;
+    font-size:20px;
+    font-weight:600;
+    margin-top:30px;
+    margin-bottom:20px;
+">
         Feature Selection Methods
         </div>
         """, unsafe_allow_html=True)
@@ -4372,14 +4421,13 @@ else:
         # -------- TILE LAYOUT (3 + 2 GRID) --------
         with st.expander(" ", expanded=True):
 
-            row1 = st.columns(3)
+            row1 = st.columns(2)
             row2 = st.columns(2)
 
             methods = [
                 "Correlation with Target",
                 "SelectKBest",
                 "Recursive Feature Elimination (RFE)",
-                "RandomForest Feature Importance",
                 "Mutual Information"
             ]
 
@@ -4387,15 +4435,14 @@ else:
                 method_tile(methods[0])
             with row1[1]:
                 method_tile(methods[1])
-            with row1[2]:
-                method_tile(methods[2])
 
             with row2[0]:
-                method_tile(methods[3])
+                method_tile(methods[2])
             with row2[1]:
-                method_tile(methods[4])
+                method_tile(methods[3])
 
         method = st.session_state.method_selection
+
 
     # ============================================================
     # 1️⃣ CORRELATION
@@ -4414,7 +4461,7 @@ else:
         corr_df["Abs_Correlation"] = corr_df["Correlation"].abs()
         corr_df = corr_df.sort_values("Abs_Correlation", ascending=False)
 
-        top_corr = corr_df.head(10)
+        top_corr = corr_df.head(20)
         selected_features = top_corr["Feature"].tolist()
 
         st.session_state["selected_features"] = selected_features
@@ -4511,7 +4558,7 @@ else:
         selector.fit(X, y)
 
         scores = pd.Series(selector.scores_, index=X.columns)
-        top_scores = scores.sort_values(ascending=False).head(10)
+        top_scores = scores.sort_values(ascending=False).head(20)
 
         selected_features = top_scores.index.tolist()
         st.session_state["selected_features"] = selected_features
@@ -4596,7 +4643,7 @@ else:
     elif method == "Recursive Feature Elimination (RFE)":
 
         model = RandomForestRegressor(n_estimators=50, random_state=42)
-        rfe = RFE(model, n_features_to_select=min(10, X.shape[1]))
+        rfe = RFE(model, n_features_to_select=min(20, X.shape[1]))
         rfe.fit(X, y)
 
         selected_features = X.columns[rfe.support_].tolist()
@@ -4627,191 +4674,6 @@ else:
         """, unsafe_allow_html=True)
 
 
-    # ============================================================
-    # 4️⃣ RANDOM FOREST FEATURE IMPORTANCE
-    # ============================================================
-    elif method == "RandomForest Feature Importance":
-
-        # ============================================================
-        # SAFE DERIVED FEATURES (NO TARGET LEAKAGE)
-        # ============================================================
-
-        # 1️⃣ Discount Intensity
-        df["discount_ratio"] = (
-            df["discount_applied"] /
-            (df["discount_applied"] + df["profit_value"]).replace(0, np.nan)
-        )
-
-        # 2️⃣ Promotion Efficiency
-        df["promo_efficiency"] = (
-            df["promo_promo_uplift_revenue"] /
-            df["promo_promo_cost"].replace(0, np.nan)
-        )
-
-        # 3️⃣ Profit to Discount Ratio
-        df["profit_discount_ratio"] = (
-            df["profit_value"] /
-            df["discount_applied"].replace(0, np.nan)
-        )
-
-        # 4️⃣ Promotion Cost Intensity
-        df["promo_cost_ratio"] = (
-            df["promo_promo_cost"] /
-            df["total_sales_amount"].replace(0, np.nan)
-        )
-
-        # ============================================================
-        # DERIVED FEATURES QUALITY CARD
-        # ============================================================
-
-        st.markdown("""
-        <div class="quality-card">
-            <div class="quality-title">
-                Derived Features Created 
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Derived Feature</th>
-                        <th>Description</th>
-                    </tr>
-                    <tr>
-                        <td>1</td>
-                        <td>discount_ratio</td>
-                        <td>Discount relative to discount + profit</td>
-                    </tr>
-                    <tr>
-                        <td>2</td>
-                        <td>promo_efficiency</td>
-                        <td>Uplift revenue divided by promotion cost</td>
-                    </tr>
-                    <tr>
-                        <td>3</td>
-                        <td>profit_discount_ratio</td>
-                        <td>Profit divided by discount applied</td>
-                    </tr>
-                    <tr>
-                        <td>4</td>
-                        <td>promo_cost_ratio</td>
-                        <td>Promotion cost relative to total sales</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ============================================================
-        # PREPARE DATA
-        # ============================================================
-
-        numeric_df = df.select_dtypes(include=["int64", "float64"]).copy()
-
-        # Replace inf values
-        numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
-
-        # Fill NaN using median
-        numeric_df = numeric_df.fillna(numeric_df.median())
-
-        X = numeric_df.drop(columns=[target_column])
-        y = numeric_df[target_column]
-
-        # ============================================================
-        # RANDOM FOREST MODEL
-        # ============================================================
-
-        model = RandomForestRegressor(
-            n_estimators=200,
-            random_state=42
-        )
-
-        model.fit(X, y)
-
-        importances = pd.Series(
-            model.feature_importances_,
-            index=X.columns
-        )
-
-        top_features = importances.sort_values(
-            ascending=False
-        ).head(10)
-
-        selected_features = top_features.index.tolist()
-        st.session_state["selected_features"] = selected_features
-
-        # ============================================================
-        # TOP FEATURES QUALITY CARD
-        # ============================================================
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Top 10 Features by Random Forest Importance
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature</th>
-                        <th>Importance</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{i+1}</td><td>{feat}</td><td>{top_features.iloc[i]:.4f}</td></tr>"
-                        for i, feat in enumerate(selected_features)
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ============================================================
-        # GREEN THEME RANDOM FOREST CHART
-        # ============================================================
-
-        GREEN_BG = "#00D05E"
-        GRID_GREEN = "#3B3B3B"
-        BAR_BLUE = "#001F5C"
-
-        plot_df = top_features.sort_values()
-
-        fig, ax = plt.subplots(figsize=(6, 3))
-
-        fig.patch.set_facecolor(GREEN_BG)
-        ax.set_facecolor(GREEN_BG)
-
-        fig.subplots_adjust(left=0.12, right=0.98, top=0.90, bottom=0.20)
-
-        bars = ax.barh(
-            plot_df.index,
-            plot_df.values,
-            color=BAR_BLUE
-        )
-
-        ax.set_xlabel("Feature Importance")
-        ax.set_ylabel("Feature")
-
-        ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        ax.tick_params(axis='y', labelsize=6)
-        ax.tick_params(axis='x', labelsize=6)
-
-        for bar in bars:
-            width = bar.get_width()
-            ax.text(
-                width + 0.002,
-                bar.get_y() + bar.get_height()/2,
-                f"{width:.3f}",
-                va="center",
-                fontsize=6,
-                color="black"
-            )
-
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close(fig)
 
     # ============================================================
     # 5️⃣ MUTUAL INFORMATION (SAME FORMAT AS OTHERS)
@@ -4821,7 +4683,7 @@ else:
         mi = mutual_info_regression(X, y)
         mi_series = pd.Series(mi, index=X.columns)
 
-        top_mi = mi_series.sort_values(ascending=False).head(10)
+        top_mi = mi_series.sort_values(ascending=False).head(20)
         selected_features = top_mi.index.tolist()
 
         st.session_state["selected_features"] = selected_features
@@ -4850,6 +4712,93 @@ else:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+
+# ============================================================
+# FEATURE IMPORTANCE (PERMUTATION IMPORTANCE)
+# ============================================================
+
+selected_features = st.session_state.get("selected_features", [])
+
+st.markdown("## Feature Importance")
+
+if not selected_features:
+    st.info("Please select at least one feature to compute feature importance.")
+else:
+
+    from sklearn.inspection import permutation_importance
+    from sklearn.linear_model import LinearRegression
+
+    numeric_df = df.select_dtypes(include=["int64", "float64"]).copy()
+    numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
+    numeric_df = numeric_df.fillna(numeric_df.median())
+
+    if target_column not in numeric_df.columns:
+        st.warning("Target column must be numeric to compute feature importance.")
+    else:
+        X = numeric_df.drop(columns=[target_column])
+        y = numeric_df[target_column]
+
+        valid_features = [col for col in selected_features if col in X.columns]
+
+        if not valid_features:
+            st.info("Selected features are not valid numeric features.")
+        else:
+            X = X[valid_features]
+
+            model = LinearRegression()
+            model.fit(X, y)
+
+            result = permutation_importance(
+                model,
+                X,
+                y,
+                n_repeats=10,
+                random_state=42,
+                n_jobs=-1
+            )
+
+            # Convert importance to series
+            importances = pd.Series(
+                result.importances_mean,
+                index=X.columns
+            )
+
+            # Remove negative importance (optional but recommended)
+            importances = importances.clip(lower=0)
+
+            # Sort descending
+            top_features = importances.sort_values(
+                ascending=False
+            )
+
+           
+
+    # ============================================================
+    # QUALITY CARD TABLE
+    # ============================================================
+
+    st.markdown(f"""
+    <div class="quality-card">
+        <div class="quality-title">
+            Top Features 
+        </div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr>
+                    <th>#</th>
+                    <th>Feature</th>
+                    <th>Importance</th>
+                </tr>
+                {''.join([
+                    f"<tr><td>{i+1}</td><td>{feat}</td><td>{top_features.iloc[i]:.4f}</td></tr>"
+                    for i, feat in enumerate(top_features.index)
+                ])}
+            </table>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # ============================================================
 # AUTO RESET SCALING IF FEATURES OR TARGET CHANGE
@@ -4880,7 +4829,7 @@ from sklearn.preprocessing import StandardScaler
 
 st.markdown("""
 <div style="
-    background-color:#18406F;
+    background-color:#2F75B5;
     padding:20px;
     border-radius:10px;
     color:white;
@@ -4899,7 +4848,7 @@ Feature Scaling (Z-Score Scaling)
 # ------------------------------------------------------------
 if "selected_features" not in st.session_state or not st.session_state["selected_features"]:
     st.info("Please select features first.")
-    st.stop()
+    
 
 selected_features = st.session_state["selected_features"]
 
@@ -4962,7 +4911,6 @@ if st.button("Apply Feature Scaling"):
 
     st.session_state["scaled_features"] = scaled_df
     st.session_state["scaler_object"] = scaler
-
     st.success("Standard Scaling Applied Successfully")
 
 
@@ -4978,18 +4926,21 @@ if "scaled_features" in st.session_state:
 
     st.markdown("### After Scaling")
     render_html_table(scaled_df.head(10), max_height=300)
-
-
 # ============================================================
-# MACHINE LEARNING IMPLEMENTATION (SAFE – NO LEAKAGE)
+# SUPPLYSYNC ML IMPLEMENTATION
 # ============================================================
 
+import xgboost as xgb
+import plotly.graph_objects as go
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import numpy as np
+from streamlit_option_menu import option_menu
 
+# ============================================================
+# 1️⃣ HEADER (SAME STYLE AS SAMPLE PROJECT)
+# ============================================================
 st.markdown("""
 <div style="
     background-color:#0B2C5D;
@@ -5005,109 +4956,242 @@ Machine Learning Implementation
 </div>
 """, unsafe_allow_html=True)
 
-
-# ------------------------------------------------------------
-# CHECK IF SCALING EXISTS
-# ------------------------------------------------------------
-if "scaled_features" not in st.session_state:
+st.markdown("<div style='margin-bottom:35px'></div>", unsafe_allow_html=True)
+if "scaled_features" in st.session_state:
+    X = st.session_state["scaled_features"].copy()
+else:
     st.warning("Please apply Feature Scaling before training.")
     st.stop()
+
+# ============================================================
+# 2️⃣ MODEL MENU (LIKE IMAGE + SAMPLE PROJECT)
+# ============================================================
+
+if "model_selected" not in st.session_state:
+    st.session_state["model_selected"] = None
+selected_model = option_menu(
+    menu_title=None,
+    options=[
+        "Time-Series Forecasting (SARIMA/ARIMA)",
+        "Prophet Based Demand Forecast",
+        "Machine Learning Regression Forecast",
+        "Deep Learning Forecast"
+    ],
+    icons=[
+        "graph-up-arrow",
+        "calendar-week",
+        "cpu-fill",
+        "layers-fill"
+    ],
+    orientation="horizontal",
+    default_index=0,
+    styles={
+        "container": {
+            "background-color": "#88E788",
+            "padding": "10px",
+            "border-radius": "10px",
+            "box-shadow": "0px 2px 4px rgba(0,0,0,0.1)"
+        },
+        "nav-link": {
+            "font-size": "14px",
+            "font-weight": "600",
+            "color": "#000",
+            "padding": "8px 16px"
+        },
+        "nav-link-selected": {
+            "background-color": "#d0e7ff",
+            "color": "#000",
+            "font-weight": "bold"
+        }
+        
+
+    }
+)
+
+st.markdown("---")
+
+
+# ============================================================
+# DATA PREPARATION
+# ============================================================
 
 X = st.session_state["scaled_features"].copy()
 y = df[target_column].copy()
 
-
-# ------------------------------------------------------------
-# AUTOMATIC LEAKAGE PREVENTION
-# ------------------------------------------------------------
-
-# 1️⃣ Remove target if somehow included
-if target_column in X.columns:
-    X = X.drop(columns=[target_column])
-
-# 2️⃣ Remove features that are directly derived from target
-derived_leakage = [
-    "revenue_per_unit",               # total_sales / quantity_sold
-    "promo_total_quantity_sold"       # contains quantity reference
-]
-
-X = X.drop(columns=[col for col in derived_leakage if col in X.columns])
-
-X = X.replace([np.inf, -np.inf], np.nan)
 X = X.fillna(X.median())
 y = y.fillna(y.median())
 
+split_index = int(len(X) * 0.8)
+
+X_train = X.iloc[:split_index]
+X_test = X.iloc[split_index:]
+
+y_train = y.iloc[:split_index]
+y_test = y.iloc[split_index:]
+
+
+# ============================================================
+# 3️⃣ MODEL ENGINEERING
+# ============================================================
+
+st.markdown("""
+<div style='background:#FDFBD4;padding:15px;border-radius:10px;margin-top:20px'>
+<b>Model Engineering</b>
+</div>
+""", unsafe_allow_html=True)
+
+st.info(f"Training Samples: {X_train.shape[0]} | Testing Samples: {X_test.shape[0]}")
+
+
 
 # ------------------------------------------------------------
-# TRAIN / TEST SPLIT
+# TIME SERIES MODEL
 # ------------------------------------------------------------
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
-    test_size=0.2,
-    random_state=42
-)
-
-
 # ------------------------------------------------------------
-# MODEL SELECTION
+# TIME SERIES MODEL
 # ------------------------------------------------------------
-model_type = st.selectbox(
-    "Select Model:",
-    ["Linear Regression"]
-)
+if selected_model == "Time-Series Forecasting (SARIMA/ARIMA)":
 
+    from statsmodels.tsa.arima.model import ARIMA
+    y_series = df.sort_values("created_at")[target_column]
+    # Use only target series
+    y_series = df[target_column].copy()
+    y_series = y_series.sort_index()
 
-# ------------------------------------------------------------
-# TRAIN MODEL
-# ------------------------------------------------------------
-if st.button("Train Model"):
+    split_index = int(len(y_series) * 0.8)
 
-    if model_type == "Linear Regression":
-        model = LinearRegression()
+    y_train = y_series.iloc[:split_index]
+    y_test = y_series.iloc[split_index:]
 
+    with st.spinner("Training ARIMA Model..."):
 
+        model = ARIMA(y_train, order=(1,0,1))
+        model_fit = model.fit()
 
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+        predictions = model_fit.forecast(steps=len(y_test))
 
-    # --------------------------------------------------------
-    # METRICS
-    # --------------------------------------------------------
-    mae = mean_absolute_error(y_test, y_pred)
-    mse = mean_squared_error(y_test, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_test, y_pred)
+        predictions = pd.Series(predictions, index=y_test.index)
 
-    st.session_state["trained_model"] = model
+    st.success("ARIMA Model Training Completed")
 
-    st.success("Model Trained Successfully")
-
-
-    # ============================================================
-    # DISPLAY METRICS
-    # ============================================================
-
-    st.markdown("### Model Performance")
-
-    st.markdown(f"""
-    <div class="summary-grid">
-        <div class="summary-card">
-            <div class="summary-title">MAE</div>
-            <div class="summary-value">{mae:.4f}</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-title">RMSE</div>
-            <div class="summary-value">{rmse:.4f}</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-title">R² Score</div>
-            <div class="summary-value">{r2:.4f}</div>
-        </div>
+    
+    st.markdown(
+    """
+    <div style='background:#E9F7EF;padding:15px;border-radius:10px;margin-top:25px'>
+    <b>Prediction Visualization</b>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+    )
+    import plotly.graph_objects as go
+    import pandas as pd
+
+    # Ensure datetime format
+    df["created_at"] = pd.to_datetime(df["created_at"])
+
+    # Create timeline dataframe
+    timeline_df = pd.DataFrame({
+        "date": df.loc[y_test.index, "created_at"],
+        "actual": y_test,
+        "predicted": predictions
+    })
+
+    # Sort chronologically
+    timeline_df = timeline_df.sort_values("date")
+
+    fig = go.Figure()
+
+    # Actual demand line
+    fig.add_trace(go.Scatter(
+        x=timeline_df["date"],
+        y=timeline_df["actual"],
+        mode='lines+markers',
+        name="Actual Sales Demand",
+        line=dict(color='royalblue', width=3),
+        marker=dict(size=6),
+        hovertemplate=
+        "<b>Actual Demand</b><br>" +
+        "Date: %{x}<br>" +
+        "Units Sold: %{y}<extra></extra>"
+    ))
+
+    # Forecast line
+    fig.add_trace(go.Scatter(
+        x=timeline_df["date"],
+        y=timeline_df["predicted"],
+        mode='lines',
+        name="Forecasted Demand",
+        line=dict(color='green', width=3, dash="dash"),
+        hovertemplate=
+        "<b>Forecasted Demand</b><br>" +
+        "Date: %{x}<br>" +
+        "Predicted Units: %{y:.2f}<extra></extra>"
+    ))
+
+    # Layout
+    fig.update_layout(
+        title="Product Demand Forecasting – Sales Timeline",
+        xaxis_title="Sales Timeline (Transaction Date)",
+        yaxis_title="Product Demand (Units Sold)",
+        legend_title="Demand Type",
+        template="plotly_white",
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+ # ------------------------------------------------------------
+# PROPHET MODEL
+# ------------------------------------------------------------
+elif selected_model == "Prophet Based Demand Forecast":
+
+    from prophet import Prophet
+
+    prophet_df = pd.DataFrame({
+        "ds": df["created_at"],
+        "y": df[target_column]
+    })
+
+    with st.spinner("Training Prophet Model..."):
+
+        model = Prophet()
+        model.fit(prophet_df)
+
+        future = model.make_future_dataframe(periods=len(y_test))
+        forecast = model.predict(future)
+
+        predictions = forecast["yhat"].tail(len(y_test)).values
+        predictions = pd.Series(predictions, index=y_test.index)
+
+    st.success("Prophet Model Training Completed")
 
 
- 
+# ============================================================
+# 4️⃣ VISUALIZATION
+# ============================================================
+
+
+# ============================================================
+# 5️⃣ MODEL INSIGHTS
+# ============================================================
+
+st.markdown(
+"""
+<div style='background:#FFF3CD;padding:15px;border-radius:10px;margin-top:25px'>
+<b>Model Insights</b>
+</div>
+""",
+unsafe_allow_html=True
+)
+
+mae = mean_absolute_error(y_test, predictions)
+r2 = r2_score(y_test, predictions)
+
+col1, col2 = st.columns(2)
+
+col1.metric("Mean Absolute Error", round(mae,2))
+col2.metric("R² Score", round(r2,3))
+
 
 
 # ============================================================

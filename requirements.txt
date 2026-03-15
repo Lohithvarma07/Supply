@@ -8,3 +8,6 @@ mysql-connector-python
 altair
 streamlit-aggrid
 statsmodels
+xgboost
+plotly
+streamlit-option-menu

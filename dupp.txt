@@ -1,0 +1,359 @@
+
+    # ============================================================
+    # 4️⃣ RANDOM FOREST FEATURE IMPORTANCE
+    # ============================================================
+    elif method == "RandomForest Feature Importance":
+
+        # ============================================================
+        # SAFE DERIVED FEATURES (NO TARGET LEAKAGE)
+        # ============================================================
+
+        # 1️⃣ Discount Intensity
+        df["discount_ratio"] = (
+            df["discount_applied"] /
+            (df["discount_applied"] + df["profit_value"]).replace(0, np.nan)
+        )
+
+        # 2️⃣ Promotion Efficiency
+        df["promo_efficiency"] = (
+            df["promo_promo_uplift_revenue"] /
+            df["promo_promo_cost"].replace(0, np.nan)
+        )
+
+        # 3️⃣ Profit to Discount Ratio
+        df["profit_discount_ratio"] = (
+            df["profit_value"] /
+            df["discount_applied"].replace(0, np.nan)
+        )
+
+        # 4️⃣ Promotion Cost Intensity
+        df["promo_cost_ratio"] = (
+            df["promo_promo_cost"] /
+            df["total_sales_amount"].replace(0, np.nan)
+        )
+
+        # ============================================================
+        # DERIVED FEATURES QUALITY CARD
+        # ============================================================
+
+        st.markdown("""
+        <div class="quality-card">
+            <div class="quality-title">
+                Derived Features Created 
+            </div>
+            <div class="table-scroll">
+                <table class="clean-table">
+                    <tr>
+                        <th>#</th>
+                        <th>Derived Feature</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td>1</td>
+                        <td>discount_ratio</td>
+                        <td>Discount relative to discount + profit</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>promo_efficiency</td>
+                        <td>Uplift revenue divided by promotion cost</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>profit_discount_ratio</td>
+                        <td>Profit divided by discount applied</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td>promo_cost_ratio</td>
+                        <td>Promotion cost relative to total sales</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ============================================================
+        # PREPARE DATA
+        # ============================================================
+
+        numeric_df = df.select_dtypes(include=["int64", "float64"]).copy()
+
+        # Replace inf values
+        numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
+
+        # Fill NaN using median
+        numeric_df = numeric_df.fillna(numeric_df.median())
+
+        X = numeric_df.drop(columns=[target_column])
+        y = numeric_df[target_column]
+
+        # ============================================================
+        # RANDOM FOREST MODEL
+        # ============================================================
+
+        model = RandomForestRegressor(
+            n_estimators=200,
+            random_state=42
+        )
+
+        model.fit(X, y)
+
+        importances = pd.Series(
+            model.feature_importances_,
+            index=X.columns
+        )
+
+        top_features = importances.sort_values(
+            ascending=False
+        ).head(10)
+
+        selected_features = top_features.index.tolist()
+        st.session_state["selected_features"] = selected_features
+
+        # ============================================================
+        # TOP FEATURES QUALITY CARD
+        # ============================================================
+
+        st.markdown(f"""
+        <div class="quality-card">
+            <div class="quality-title">
+                Top 10 Features by Random Forest Importance
+            </div>
+            <div class="table-scroll">
+                <table class="clean-table">
+                    <tr>
+                        <th>#</th>
+                        <th>Feature</th>
+                        <th>Importance</th>
+                    </tr>
+                    {''.join([
+                        f"<tr><td>{i+1}</td><td>{feat}</td><td>{top_features.iloc[i]:.4f}</td></tr>"
+                        for i, feat in enumerate(selected_features)
+                    ])}
+                </table>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ============================================================
+        # GREEN THEME RANDOM FOREST CHART
+        # ============================================================
+
+        GREEN_BG = "#00D05E"
+        GRID_GREEN = "#3B3B3B"
+        BAR_BLUE = "#001F5C"
+
+        plot_df = top_features.sort_values()
+
+        fig, ax = plt.subplots(figsize=(6, 3))
+
+        fig.patch.set_facecolor(GREEN_BG)
+        ax.set_facecolor(GREEN_BG)
+
+        fig.subplots_adjust(left=0.12, right=0.98, top=0.90, bottom=0.20)
+
+        bars = ax.barh(
+            plot_df.index,
+            plot_df.values,
+            color=BAR_BLUE
+        )
+
+        ax.set_xlabel("Feature Importance")
+        ax.set_ylabel("Feature")
+
+        ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        ax.tick_params(axis='y', labelsize=6)
+        ax.tick_params(axis='x', labelsize=6)
+
+        for bar in bars:
+            width = bar.get_width()
+            ax.text(
+                width + 0.002,
+                bar.get_y() + bar.get_height()/2,
+                f"{width:.3f}",
+                va="center",
+                fontsize=6,
+                color="black"
+            )
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------
+# TRAIN MODEL
+# ------------------------------------------------------------
+if st.button("Train Model"):
+
+    if model_type == "Linear Regression":
+        model = LinearRegression()
+
+
+
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    # --------------------------------------------------------
+    # METRICS
+    # --------------------------------------------------------
+    mae = mean_absolute_error(y_test, y_pred)
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, y_pred)
+
+    st.session_state["trained_model"] = model
+
+    st.success("Model Trained Successfully")
+
+
+    # ============================================================
+    # DISPLAY METRICS
+    # ============================================================
+
+    st.markdown("### Model Performance")
+
+    st.markdown(f"""
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="summary-title">MAE</div>
+            <div class="summary-value">{mae:.4f}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-title">RMSE</div>
+            <div class="summary-value">{rmse:.4f}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-title">R² Score</div>
+            <div class="summary-value">{r2:.4f}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+ 
+ 
+# ============================================================
+# Manual
+# ============================================================
+
+if selection_mode == "Manual":
+
+    feature_columns = [
+        col for col in df.select_dtypes(include=["int64", "float64"]).columns
+        if col != target_column and "id" not in col.lower() and "invoice" not in col.lower()
+    ]
+
+    # Initialize once
+    if "selected_features" not in st.session_state:
+        st.session_state["selected_features"] = feature_columns[:5]
+
+    # 🔥 Select All toggle
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("Select All"):
+            st.session_state["selected_features"] = feature_columns.copy()
+    with col2:
+        if st.button("Clear All"):
+            st.session_state["selected_features"] = []
+
+    # 🔥 Sort so selected appear on top
+    sorted_features = sorted(
+        feature_columns,
+        key=lambda x: x not in st.session_state["selected_features"]
+    )
+
+    # Build selection dataframe
+    feature_df = pd.DataFrame({
+        "Select": [col in st.session_state["selected_features"] for col in sorted_features],
+        "Feature": sorted_features
+    })
+
+    st.markdown("### Select Features")
+    
+
+    edited_df = st.data_editor(
+        feature_df,
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        column_config={
+            "Select": st.column_config.CheckboxColumn(
+                width="small"
+            ),
+            "Feature": st.column_config.TextColumn(
+                width="large"
+            )
+        }
+    )
+
+    # Update selected features
+    selected_features = edited_df.loc[edited_df["Select"], "Feature"].tolist()
+    st.session_state["selected_features"] = selected_features
+
+
+st.markdown("""
+<style>
+
+/* Make radio container full width */
+div.element-container:has(div.stRadio) {
+    width: 100% !important;
+}
+
+/* Green full width background */
+div.stRadio > div {
+    background-color: #00D05E;
+    padding: 18px 0;
+    border-radius: 10px;
+    width: 100% !important;
+}
+
+/* Center radio group horizontally */
+div[data-baseweb="radio-group"] {
+    display: flex !important;
+    justify-content: center !important;   /* center horizontally */
+    align-items: center !important;
+    gap: 60px;                            /* space between options */
+    width: 100% !important;
+}
+
+/* Remove left alignment behaviour */
+div[data-baseweb="radio"] {
+    margin: 0 !important;
+}
+
+/* Style radio text */
+div[data-baseweb="radio"] label,
+div[data-baseweb="radio"] label span {
+    color: #FFFFFF !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+}
+
+/* Make radio circle white */
+div[data-baseweb="radio"] input + div {
+    border-color: white !important;
+}
+
+/* Active circle fill */
+div[data-baseweb="radio"] input:checked + div {
+    background-color: white !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+
+selection_mode = st.radio(
+    "",
+    ["Automated", "Manual"],
+    horizontal=True,
+    key="selection_mode"
+)
