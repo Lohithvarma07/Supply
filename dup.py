@@ -8,7 +8,7 @@ import numpy as np
 from utils.html_table import render_html_table
 import streamlit as st
 import altair as alt
-
+from streamlit_option_menu import option_menu
 
 
 st.set_page_config(page_title="SupplySyncAI – MLOps UI", layout="wide")
@@ -27,6 +27,11 @@ st.markdown("""
 .block-container {
     padding-top: 0rem !important;
     margin-top: -5.5rem !important;
+    
+}
+/* keep app background */
+.main {
+    background-color: #f0f2f6 !important;
 }
 
 
@@ -68,7 +73,7 @@ st.markdown("""
 
 /* Block container — single source of truth */
 .block-container {
-    padding-left: 2rem !important;
+    padding-left: 1rem !important;
     padding-right: 1rem !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
@@ -86,50 +91,74 @@ section.main > div {
     padding-right: 0rem !important;
     overflow-x: hidden !important;
 }
+
             
 </style>
 """, unsafe_allow_html=True)
 
+
 st.markdown("""
 <style>
-            
-            
 
-/* Green radio container */
-div[data-testid="stRadio"] > div {
-    background-color: #00D05E;
-    padding: 16px 24px;
-    border-radius: 8px;
-    width: calc(100vw - 4rem) !important;
-    max-width: calc(100vw - 4rem) !important;
-    box-sizing: border-box;
-            
-}
-
-/* Inner container */
-div[data-testid="stRadio"] > div > div {
+/* =========================================
+   RADIO CONTAINER – FULL WIDTH
+   ========================================= */
+div.element-container:has(div.stRadio) {
     width: 100% !important;
 }
 
-/* Radio group layout */
+/* =========================================
+   Teal WRAP BOX – FULL PAGE WIDTH
+   ========================================= */
+div.stRadio > div {
+    background-color:  #00D05E;
+    padding: 16px 0px;
+    border-radius: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+}
+
+/* =========================================
+   RADIO GROUP ALIGNMENT
+   ========================================= */
 div[data-baseweb="radio-group"] {
     display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-evenly !important;
-    align-items: center !important;
-    width: 100% !important;
-    gap: 20px !important;
+    justify-content: center !important;
+    align-items: center;
+    gap: 50px;
+    width: 100%;
+    margin: 0 auto;
 }
-
-/* Radio option */
+            
 div[data-baseweb="radio"] {
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-div[data-baseweb="radio"] * {
-    color: white !important;
+/* =========================================
+   RADIO OPTION TEXT
+   ========================================= */
+/* RADIO LABEL TEXT – FORCE WHITE */
+div[data-baseweb="radio"] label,
+div[data-baseweb="radio"] label span {
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    color: #FFFFFF !important;
+    white-space: nowrap;
 }
+
+
+/* =========================================
+   SPACE BETWEEN OPTIONS
+   ========================================= */
+div[data-baseweb="radio"] {
+    margin-right: 28px;
+}
+
+          
 
 </style>
 """, unsafe_allow_html=True)
@@ -233,25 +262,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-st.markdown("""
-<style>
-/* Outer gray wrap */
-.gray-analytics-wrap {
-    background-color: #E6E6E6;
-    padding: 16px 400px;
-    border-radius: 8px;
-    width: 100%;              
-    box-sizing: border-box;
-}
 
-/* Inner blue analytics bar */
-.analytics-container {
-    background-color:#1F6FB2;
-    padding:18px;
-    border-radius:14px;
-}
-</style>
-""", unsafe_allow_html=True)
 
 
 
@@ -526,6 +537,7 @@ step = st.radio(
     label_visibility="collapsed"
 
 )
+
 
 
 # ============================================================
@@ -1095,27 +1107,6 @@ st.markdown("""
 }
 
 
-/* =====================================================
-   EDA RADIO NAVIGATION (optional but safe)
-   ===================================================== */
-
-div[data-baseweb="radio-group"] {
-    background-color: #F8F9F9;
-    padding: 12px 16px;
-    border-radius: 10px;
-    border: 1px solid #E5E7E9;
-    margin-bottom: 18px;
-}
-
-div[data-baseweb="radio"] {
-    margin-right: 14px;
-}
-
-div[data-baseweb="radio"] input:checked + div {
-    font-weight: 600;
-    color: #2F75B5;
-}
-
 
 /* =====================================================
    DATA QUALITY – LAYOUT (FINAL, CLEAN)
@@ -1276,6 +1267,9 @@ if df is None:
     st.warning("⚠ No dataset available.")
     st.stop()
 
+if "eda_completed" not in st.session_state:
+    st.session_state.eda_completed = False
+
 
 # ---------------- EDA HEADER ----------------
 st.markdown(
@@ -1427,6 +1421,8 @@ with st.expander(" ", expanded=True):
 
 
 eda_option = st.session_state.eda_option
+if eda_option is not None:
+    st.session_state.eda_completed = True
 st.markdown(
     "<div style='margin-top:6px'></div>",
     unsafe_allow_html=True
@@ -1434,7 +1430,6 @@ st.markdown(
 
 if eda_option is None:
     st.info("Select an analysis to view insights.")
-    st.stop()
 
 
 # ============================================================
@@ -3917,9 +3912,7 @@ elif eda_option == "Summary Report":
             color:white;
             font-size:16px;
             line-height:1.6;
-            margin-bottom:25px;
-            
-        ">
+            margin-bottom:25px;">
 
         <b>What this section does:</b>
 
@@ -4049,1165 +4042,1049 @@ elif eda_option == "Summary Report":
     )
 
 st.write("")
-
 # ============================================================
-# STEP 4 – FEATURE ENGINEERING
-# ============================================================
-
-st.markdown(
-    """
-    <div style="
-        background-color:#0B2C5D;
-        padding:18px 25px;
-        border-radius:10px;
-        color:white;
-        margin-top:10px;
-        margin-bottom:20px;
-    ">
-        <h3 style="margin:0;">
-            Feature Engineering
-        </h3>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
-    <div style="
-        background-color:#2F75B5;
-        padding:24px;
-        border-radius:12px;
-        color:white;
-        font-size:16px;
-        line-height:1.7;
-        margin-bottom:20px;
-    ">
-
-    <h3 style="margin-top:0;">Feature Engineering </h3>
-
-    Feature Engineering is the foundation of building robust Machine Learning models. 
-    It involves extracting meaningful variables from raw data and selecting the most 
-    impactful features for predictions. By transforming, encoding, and scaling data 
-    properly, we improve the model’s ability to <b>learn patterns</b> effectively.
-
-    
-
-    <b>In this project, we apply:</b>
-
-    <ul>
-        <li> <b>Feature Extraction</b> – deriving new variables from raw data</li>
-        <li><b>Feature Selection</b> – choosing the most relevant predictors</li>
-        <li><b>Encoding</b> – converting categorical data into numeric form</li>
-        <li><b>Scaling</b> – normalizing numerical values for fair comparison</li>
-    </ul>
-
-
-    In this step, we ensure data is cleaned, relevant attributes are created, 
-    and only the most predictive ones are used.
-
-    <ul>
-        <li>Handle missing values, outliers, and noisy data</li>
-        <li>Encode categorical variables & normalize numeric features</li>
-        <li>Create new features from existing data (domain-driven engineering)</li>
-        <li> Select the best subset of features using statistical & ML-based methods</li>
-    </ul>
-
-    This step directly influences <b>model accuracy, interpretability, and generalization performance.</b>
-
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
-    <div style="
-        background-color:#18406F;
-        padding:24px;
-        border-radius:12px;
-        color:white;
-        font-size:16px;
-        line-height:1.6;
-        margin-bottom:20px;
-    ">
-    <h3>
-    Feature Selection </h3>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-
-
-# ============================================================
-# FEATURE SELECTION MODULE – SUPPLYSYNC RETAIL VERSION
+# SUPPLYSYNC ML IMPLEMENTATION
 # ============================================================
 
-from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression, RFE
-from sklearn.ensemble import RandomForestRegressor
-
-# ============================================================
-# SECTION HEADER – TARGET SELECTION
-# ============================================================
-
-st.markdown("""
-<div style="
-    background-color:#1F4E8C;
-    padding:20px;
-    border-radius:12px;
-    color:white;
-    font-size:20px;
-    font-weight:600;
-    margin-top:30px;
-    margin-bottom:20px;
-">
-Select Target Variable
-</div>
-""", unsafe_allow_html=True)
-
-
-numeric_columns = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-
-if len(numeric_columns) == 0:
-    st.error("No numeric columns found for feature selection.")
-    st.stop()
-
-target_column = st.selectbox(
-    "Choose your target column:",
-    numeric_columns,
-    index=numeric_columns.index("quantity_sold") if "quantity_sold" in numeric_columns else 0
-)
-# ============================================================
-# DEMAND LAG FEATURES (IMPORTANT FOR FORECASTING)
-# ============================================================
-
-
-# ============================================================
-# SELECTION APPROACH
-# ============================================================
-
-st.markdown("""
-<div style="
-    background-color:#163A70;
-    padding:18px;
-    border-radius:10px;
-    color:white;
-    font-size:18px;
-    font-weight:600;
-    margin-top:25px;
-    margin-bottom:15px;
-">
-Choose Feature Selection Approach
-</div>
-""", unsafe_allow_html=True)
-# ============================================================
-# FEATURE SELECTION APPROACH (EDA STYLE TILES)
-# ============================================================
-
-
-# ---------------- SESSION STATE ----------------
-if "selection_mode" not in st.session_state:
-    st.session_state.selection_mode = "Manual"
-
-
-# ---------------- TILE BUTTON FUNCTION ----------------
-def selection_tile(label):
-    active = st.session_state.selection_mode == label
-
-    if active:
-        st.markdown(
-            f"""
-            <div style="
-                background-color:#163A70;
-                color:white;
-                padding:16px;
-                border-radius:10px;
-                font-weight:600;
-                text-align:center;
-                margin-bottom:12px;
-            ">
-                {label}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        if st.button(label, use_container_width=True):
-            st.session_state.selection_mode = label
-            st.rerun()
-
-
-# ---------------- TILE CONTAINER ----------------
-with st.expander(" ", expanded=True):
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        selection_tile("Automated")
-
-    with col2:
-        selection_tile("Manual")
-
-
-selection_mode = st.session_state.selection_mode
-
-# ============================================================
-# Manual
-# ============================================================
-
-if selection_mode == "Manual":
-
-    feature_columns = [
-    col for col in df.select_dtypes(include=["int64", "float64"]).columns
-    if col != target_column and "id" not in col.lower() and "invoice" not in col.lower()
-]
-
-    selected_features = st.multiselect(
-        "Select Features Manually:",
-        feature_columns,
-        default=feature_columns[:5]
-    )
-
-    # Save immediately to session
-    st.session_state["selected_features"] = selected_features
-
-    # ============================================================
-    # DISPLAY SELECTED FEATURES (QUALITY CARD STYLE)
-    # ============================================================
-
-    if selected_features:
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Selected Features ({len(selected_features)})
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature Name</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{i+1}</td><td>{feat}</td></tr>"
-                        for i, feat in enumerate(selected_features)
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-    else:
-        st.info("No features selected.")
-
-    st.session_state["selected_features"] = selected_features
-
-# ============================================================
-# Automated
-# ============================================================
-
-else:
-
-    numeric_df = df.select_dtypes(include=["int64", "float64"]).dropna()
-
-    if target_column not in numeric_df.columns:
-        st.error("Target must be numeric for Automated.")
-        st.stop()
-
-    X = numeric_df.drop(columns=[target_column])
-    y = numeric_df[target_column]
-
-    if X.shape[1] == 0:
-        st.error("No numeric features available for selection.")
-        st.stop()
-
-
-    # ============================================================
-    # FEATURE SELECTION METHODS (EDA STYLE TILES)
-    # ============================================================
-
-    if selection_mode == "Automated":
-
-        st.markdown("""
-        <div style="
-            background-color:#163A70;
-            padding:18px 25px;
-            border-radius:10px;
-            color:white;
-            margin-top:25px;
-            margin-bottom:15px;
-            font-size:18px;
-            font-weight:600;
-        ">
-        Feature Selection Methods
-        </div>
-        """, unsafe_allow_html=True)
-
-        # -------- SESSION STATE --------
-        if "method_selection" not in st.session_state:
-            st.session_state.method_selection = "Correlation with Target"
-
-
-        # -------- TILE FUNCTION --------
-        def method_tile(label):
-            active = st.session_state.method_selection == label
-
-            if active:
-                st.markdown(
-                    f"""
-                    <div style="
-                        background-color:#163A70;
-                        color:white;
-                        padding:16px;
-                        border-radius:10px;
-                        font-weight:600;
-                        text-align:center;
-                        margin-bottom:12px;
-                    ">
-                        {label}
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                if st.button(label, use_container_width=True):
-                    st.session_state.method_selection = label
-                    st.rerun()
-
-
-        # -------- TILE LAYOUT (3 + 2 GRID) --------
-        with st.expander(" ", expanded=True):
-
-            row1 = st.columns(3)
-            row2 = st.columns(2)
-
-            methods = [
-                "Correlation with Target",
-                "SelectKBest",
-                "Recursive Feature Elimination (RFE)",
-                "RandomForest Feature Importance",
-                "Mutual Information"
-            ]
-
-            with row1[0]:
-                method_tile(methods[0])
-            with row1[1]:
-                method_tile(methods[1])
-            with row1[2]:
-                method_tile(methods[2])
-
-            with row2[0]:
-                method_tile(methods[3])
-            with row2[1]:
-                method_tile(methods[4])
-
-        method = st.session_state.method_selection
-
-    # ============================================================
-    # 1️⃣ CORRELATION
-    # ============================================================
-    if method == "Correlation with Target":
-
-        # ===============================
-        # CORRELATION CALCULATION
-        # ===============================
-        corr = numeric_df.corr()[target_column]
-        corr_df = corr.reset_index()
-        corr_df.columns = ["Feature", "Correlation"]
-        corr_df = corr_df[corr_df["Feature"] != target_column]
-
-        # Use absolute correlation for ranking (more correct)
-        corr_df["Abs_Correlation"] = corr_df["Correlation"].abs()
-        corr_df = corr_df.sort_values("Abs_Correlation", ascending=False)
-
-        top_corr = corr_df.head(10)
-        selected_features = top_corr["Feature"].tolist()
-
-        st.session_state["selected_features"] = selected_features
-
-        # ===============================
-        # QUALITY CARD FIRST
-        # ===============================
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Top 10 Features by Correlation with '{target_column}'
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature</th>
-                        <th>Correlation</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{idx+1}</td><td>{row['Feature']}</td><td>{row['Correlation']:.4f}</td></tr>"
-                        for idx, row in top_corr.iterrows()
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ===============================
-        # PROFESSIONAL EXECUTIVE CHART
-        # ===============================
-        # ===============================
-
-        
-        GREEN_BG = "#00D05E"
-        GRID_GREEN = "#3B3B3B"
-
-        BAR_BLUE = "#001F5C"
-        plot_df = top_corr.sort_values("Correlation")
-
-        fig, ax = plt.subplots(figsize=(7, 4))
-
-        fig.patch.set_facecolor(GREEN_BG)
-        ax.set_facecolor(GREEN_BG)
-        fig.subplots_adjust(left=0.12, right=0.98, top=0.90, bottom=0.20)
-
-        colors = [
-            BAR_BLUE if val > 0 else "#0863BD"
-            for val in plot_df["Correlation"]
-        ]
-
-        bars = ax.barh(
-            plot_df["Feature"],
-            plot_df["Correlation"],
-            color=colors
-        )
-
-        ax.set_xlabel("Correlation Value")
-        ax.set_ylabel("Feature")
-
-        ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        ax.tick_params(axis='y', labelsize=8)
-        ax.tick_params(axis='x', labelsize=8)
-
-        # ===============================
-        # ADD CORRELATION VALUE LABELS
-        # ===============================
-        for bar in bars:
-            width = bar.get_width()
-            ax.text(
-                width,
-                bar.get_y() + bar.get_height() / 2,
-                f"{width:.2f}",
-                va="center",
-                ha="left" if width > 0 else "right",
-                fontsize=8,
-                color="black"
-            )
-
-        st.pyplot(fig)
-        plt.close(fig)
-
-
-    # ============================================================
-    # 2️⃣ SELECT KBEST (SAME FORMAT AS CORRELATION)
-    # ============================================================
-    elif method == "SelectKBest":
-
-        selector = SelectKBest(score_func=f_regression, k=min(10, X.shape[1]))
-        selector.fit(X, y)
-
-        scores = pd.Series(selector.scores_, index=X.columns)
-        top_scores = scores.sort_values(ascending=False).head(10)
-
-        selected_features = top_scores.index.tolist()
-        st.session_state["selected_features"] = selected_features
-
-        # ============================================================
-        # QUALITY CARD FIRST
-        # ============================================================
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Top 10 Features by SelectKBest (F-Score)
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature</th>
-                        <th>F-Score</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{i+1}</td><td>{feat}</td><td>{top_scores.iloc[i]:.4f}</td></tr>"
-                        for i, feat in enumerate(selected_features)
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ============================================================
-        # GREEN THEME CHART (MATCH CORRELATION STYLE)
-        # ============================================================
-        GREEN_BG = "#00D05E"
-        GRID_GREEN = "#3B3B3B"
-
-        BAR_BLUE = "#001F5C"
-
-        plot_df = top_scores.sort_values()
-
-        fig, ax = plt.subplots(figsize=(7, 4))
-
-        fig.patch.set_facecolor(GREEN_BG)
-        ax.set_facecolor(GREEN_BG)
-        fig.subplots_adjust(left=0.12, right=0.98, top=0.90, bottom=0.20)
-
-        bars = ax.barh(
-            plot_df.index,
-            plot_df.values,
-            color=BAR_BLUE
-        )
-
-        ax.set_xlabel("F-Score")
-        ax.set_ylabel("Feature")
-
-        ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        ax.tick_params(axis='y', labelsize=8)
-        ax.tick_params(axis='x', labelsize=8)
-
-        # Add F-score values
-        for bar in bars:
-            width = bar.get_width()
-            ax.text(
-                width + 0.005,
-                bar.get_y() + bar.get_height() / 2,
-                f"{width:.2f}",
-                va="center",
-                fontsize=8,
-                color="black"
-            )
-
-        st.pyplot(fig)
-        plt.close(fig)
-
-
-
-    # ============================================================
-    # 3️⃣ RFE (CLEAN FORMAT – NO RANK)
-    # ============================================================
-    elif method == "Recursive Feature Elimination (RFE)":
-
-        model = RandomForestRegressor(n_estimators=50, random_state=42)
-        rfe = RFE(model, n_features_to_select=min(10, X.shape[1]))
-        rfe.fit(X, y)
-
-        selected_features = X.columns[rfe.support_].tolist()
-        st.session_state["selected_features"] = selected_features
-
-        # ============================================================
-        # QUALITY CARD FIRST
-        # ============================================================
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Top Features Selected by RFE
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{i+1}</td><td>{feat}</td></tr>"
-                        for i, feat in enumerate(selected_features)
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-    # ============================================================
-    # 4️⃣ RANDOM FOREST FEATURE IMPORTANCE
-    # ============================================================
-    elif method == "RandomForest Feature Importance":
-
-        # ============================================================
-        # SAFE DERIVED FEATURES (NO TARGET LEAKAGE)
-        # ============================================================
-
-        # 1️⃣ Discount Intensity
-        df["discount_ratio"] = (
-            df["discount_applied"] /
-            (df["discount_applied"] + df["profit_value"]).replace(0, np.nan)
-        )
-
-        # 2️⃣ Promotion Efficiency
-        df["promo_efficiency"] = (
-            df["promo_promo_uplift_revenue"] /
-            df["promo_promo_cost"].replace(0, np.nan)
-        )
-
-        # 3️⃣ Profit to Discount Ratio
-        df["profit_discount_ratio"] = (
-            df["profit_value"] /
-            df["discount_applied"].replace(0, np.nan)
-        )
-
-        # 4️⃣ Promotion Cost Intensity
-        df["promo_cost_ratio"] = (
-            df["promo_promo_cost"] /
-            df["total_sales_amount"].replace(0, np.nan)
-        )
-
-        # ============================================================
-        # DERIVED FEATURES QUALITY CARD
-        # ============================================================
-
-        st.markdown("""
-        <div class="quality-card">
-            <div class="quality-title">
-                Derived Features Created 
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Derived Feature</th>
-                        <th>Description</th>
-                    </tr>
-                    <tr>
-                        <td>1</td>
-                        <td>discount_ratio</td>
-                        <td>Discount relative to discount + profit</td>
-                    </tr>
-                    <tr>
-                        <td>2</td>
-                        <td>promo_efficiency</td>
-                        <td>Uplift revenue divided by promotion cost</td>
-                    </tr>
-                    <tr>
-                        <td>3</td>
-                        <td>profit_discount_ratio</td>
-                        <td>Profit divided by discount applied</td>
-                    </tr>
-                    <tr>
-                        <td>4</td>
-                        <td>promo_cost_ratio</td>
-                        <td>Promotion cost relative to total sales</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ============================================================
-        # PREPARE DATA
-        # ============================================================
-
-        numeric_df = df.select_dtypes(include=["int64", "float64"]).copy()
-
-        # Replace inf values
-        numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
-
-        # Fill NaN using median
-        numeric_df = numeric_df.fillna(numeric_df.median())
-
-        X = numeric_df.drop(columns=[target_column])
-        y = numeric_df[target_column]
-
-        # ============================================================
-        # RANDOM FOREST MODEL
-        # ============================================================
-
-        model = RandomForestRegressor(
-            n_estimators=200,
-            random_state=42
-        )
-
-        model.fit(X, y)
-
-        importances = pd.Series(
-            model.feature_importances_,
-            index=X.columns
-        )
-
-        top_features = importances.sort_values(
-            ascending=False
-        ).head(10)
-
-        selected_features = top_features.index.tolist()
-        st.session_state["selected_features"] = selected_features
-
-        # ============================================================
-        # TOP FEATURES QUALITY CARD
-        # ============================================================
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Top 10 Features by Random Forest Importance
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature</th>
-                        <th>Importance</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{i+1}</td><td>{feat}</td><td>{top_features.iloc[i]:.4f}</td></tr>"
-                        for i, feat in enumerate(selected_features)
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ============================================================
-        # GREEN THEME RANDOM FOREST CHART
-        # ============================================================
-
-        GREEN_BG = "#00D05E"
-        GRID_GREEN = "#3B3B3B"
-        BAR_BLUE = "#001F5C"
-
-        plot_df = top_features.sort_values()
-
-        fig, ax = plt.subplots(figsize=(6, 3))
-
-        fig.patch.set_facecolor(GREEN_BG)
-        ax.set_facecolor(GREEN_BG)
-
-        fig.subplots_adjust(left=0.12, right=0.98, top=0.90, bottom=0.20)
-
-        bars = ax.barh(
-            plot_df.index,
-            plot_df.values,
-            color=BAR_BLUE
-        )
-
-        ax.set_xlabel("Feature Importance")
-        ax.set_ylabel("Feature")
-
-        ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        ax.tick_params(axis='y', labelsize=6)
-        ax.tick_params(axis='x', labelsize=6)
-
-        for bar in bars:
-            width = bar.get_width()
-            ax.text(
-                width + 0.002,
-                bar.get_y() + bar.get_height()/2,
-                f"{width:.3f}",
-                va="center",
-                fontsize=6,
-                color="black"
-            )
-
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close(fig)
-
-    # ============================================================
-    # 5️⃣ MUTUAL INFORMATION (SAME FORMAT AS OTHERS)
-    # ============================================================
-    elif method == "Mutual Information":
-
-        mi = mutual_info_regression(X, y)
-        mi_series = pd.Series(mi, index=X.columns)
-
-        top_mi = mi_series.sort_values(ascending=False).head(10)
-        selected_features = top_mi.index.tolist()
-
-        st.session_state["selected_features"] = selected_features
-
-        # ============================================================
-        # QUALITY CARD FIRST
-        # ============================================================
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">
-                Top 10 Features by Mutual Information
-            </div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>
-                        <th>#</th>
-                        <th>Feature</th>
-                        <th>MI Score</th>
-                    </tr>
-                    {''.join([
-                        f"<tr><td>{i+1}</td><td>{feat}</td><td>{top_mi.iloc[i]:.4f}</td></tr>"
-                        for i, feat in enumerate(selected_features)
-                    ])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# ============================================================
-# AUTO RESET SCALING IF FEATURES OR TARGET CHANGE
-# ============================================================
-
-current_signature = (
-    tuple(sorted(st.session_state.get("selected_features", []))),
-    target_column,
-    st.session_state.get("selection_mode"),
-    st.session_state.get("method_selection")
-)
-
-if "feature_signature" not in st.session_state:
-    st.session_state["feature_signature"] = current_signature
-
-if st.session_state["feature_signature"] != current_signature:
-
-    if "scaled_features" in st.session_state:
-        del st.session_state["scaled_features"]
-
-    if "scaler_object" in st.session_state:
-        del st.session_state["scaler_object"]
-
-    st.session_state["feature_signature"] = current_signature
-
-
-from sklearn.preprocessing import StandardScaler
-
-st.markdown("""
-<div style="
-    background-color:#18406F;
-    padding:20px;
-    border-radius:10px;
-    color:white;
-    font-size:18px;
-    font-weight:600;
-    margin-top:30px;
-    margin-bottom:20px;
-">
-Feature Scaling (Z-Score Scaling)
-</div>
-""", unsafe_allow_html=True)
-
-
-# ------------------------------------------------------------
-# CHECK IF FEATURES EXIST
-# ------------------------------------------------------------
-if "selected_features" not in st.session_state or not st.session_state["selected_features"]:
-    st.info("Please select features first.")
-    st.stop()
-
-selected_features = st.session_state["selected_features"]
-
-# Keep numeric only
-X = df[selected_features].select_dtypes(include=["int64", "float64"]).copy()
-
-if X.shape[1] == 0:
-    st.warning("No numeric features selected.")
-    st.stop()
-
-selection_mode = st.session_state.get("selection_mode", "Manual")
-method_used = st.session_state.get("method_selection", "Manual Selection")
-selected_features = st.session_state.get("selected_features", [])
-
-st.markdown(f"""
-<div class="quality-card">
-    <div class="quality-title">
-        Current Configuration
-    </div>
-    <div class="table-scroll">
-        <table class="clean-table">
-            <tr>
-                <th>Item</th>
-                <th>Value</th>
-            </tr>
-            <tr>
-                <td>Target Column</td>
-                <td>{target_column}</td>
-            </tr>
-            <tr>
-                <td>Selection Approach</td>
-                <td>{selection_mode}</td>
-            </tr>
-            <tr>
-                <td>Method Used</td>
-                <td>{method_used if selection_mode == "Automated" else "Manual Selection"}</td>
-            </tr>
-            <tr>
-                <td>Total Selected Features</td>
-                <td>{len(selected_features)}</td>
-            </tr>
-        </table>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ------------------------------------------------------------
-# APPLY STANDARD SCALING
-# ------------------------------------------------------------
-if st.button("Apply Feature Scaling"):
-
-    scaler = StandardScaler()
-    scaled_values = scaler.fit_transform(X)
-
-    scaled_df = pd.DataFrame(
-        scaled_values,
-        columns=X.columns,
-        index=X.index
-    )
-
-    st.session_state["scaled_features"] = scaled_df
-    st.session_state["scaler_object"] = scaler
-
-    st.success("Standard Scaling Applied Successfully")
-
-
-# ------------------------------------------------------------
-# DISPLAY RESULTS
-# ------------------------------------------------------------
-if "scaled_features" in st.session_state:
-
-    scaled_df = st.session_state["scaled_features"]
-
-    st.markdown("### Before Scaling")
-    render_html_table(X.head(10), max_height=300)
-
-    st.markdown("### After Scaling")
-    render_html_table(scaled_df.head(10), max_height=300)
-
-
-# ============================================================
-# MACHINE LEARNING IMPLEMENTATION (SAFE – NO LEAKAGE)
-# ============================================================
+import xgboost as xgb
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import numpy as np
+
+from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression, RFE
+from sklearn.preprocessing import StandardScaler
+from sklearn.inspection import permutation_importance
+
+from streamlit_option_menu import option_menu
+
+# ============================================================
+# HEADER
+# ============================================================
 
 st.markdown("""
 <div style="
-    background-color:#0B2C5D;
-    padding:20px;
-    border-radius:12px;
-    color:white;
-    font-size:20px;
-    font-weight:600;
-    margin-top:40px;
-    margin-bottom:20px;
+background-color:#0B2C5D;
+padding:20px;
+border-radius:12px;
+color:white;
+font-size:20px;
+font-weight:600;
+margin-top:40px;
+margin-bottom:20px;
 ">
 Machine Learning Implementation
 </div>
 """, unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------
-# CHECK IF SCALING EXISTS
-# ------------------------------------------------------------
-if "scaled_features" not in st.session_state:
-    st.warning("Please apply Feature Scaling before training.")
-    st.stop()
+# ============================================================
+# TARGET SELECTION
+# ============================================================
 
-X = st.session_state["scaled_features"].copy()
-y = df[target_column].copy()
+numeric_columns = df.select_dtypes(include=["int64","float64"]).columns.tolist()
 
+target_column = st.selectbox(
+"Select Target Column",
+numeric_columns,
+index=numeric_columns.index("quantity_sold") if "quantity_sold" in numeric_columns else 0
+)
+# ============================================================
+# CREATE TIME SERIES FEATURES (FOR ML/DL MODELS)
+# ============================================================
 
-# ------------------------------------------------------------
-# AUTOMATIC LEAKAGE PREVENTION
-# ------------------------------------------------------------
+df = df.sort_values("created_at")
 
-# 1️⃣ Remove target if somehow included
-if target_column in X.columns:
-    X = X.drop(columns=[target_column])
+df["lag_1"] = df[target_column].shift(1)
+df["lag_7"] = df[target_column].shift(7)
+df["rolling_mean_7"] = df[target_column].rolling(7).mean()
 
-# 2️⃣ Remove features that are directly derived from target
-derived_leakage = [
-    "revenue_per_unit",               # total_sales / quantity_sold
-    "promo_total_quantity_sold"       # contains quantity reference
-]
+# Remove rows with NaN created by lagging
+df = df.dropna(subset=["lag_1","lag_7","rolling_mean_7"]).reset_index(drop=True)
 
-X = X.drop(columns=[col for col in derived_leakage if col in X.columns])
+# ============================================================
+# MODEL MENU
+# ============================================================
 
-X = X.replace([np.inf, -np.inf], np.nan)
-X = X.fillna(X.median())
-y = y.fillna(y.median())
+selected_model = option_menu(
+    menu_title=None,
+    options=[
+        "Time-Series Forecasting",
+        "Prophet Based Demand Forecast",
+        "Machine Learning Regression Forecast",
+        "Deep Learning Forecast"
+    ],
+    icons=[
+        "graph-up-arrow",
+        "calendar-week",
+        "cpu-fill",
+        "layers-fill"
+    ],
+    orientation="horizontal",
+    default_index=0,
+    styles={
+        "container": {
+            "background-color":"#00D05E",
+            "padding": "10px",
+            "border-radius": "10px",
+            "box-shadow": "0px 2px 4px rgba(0,0,0,0.1)",
+            "display": "flex",
+            "width": "100%",
+            "max-width": "100%"
+        },
+        "nav-link": {
+            "font-size": "14px",
+            "font-weight": "600",
+            "color": "#000",
+            "padding": "8px 16px",
+            "flex-grow": "1",
+            "text-align": "center",
+        },
+        "nav-link-selected": {
+            "background-color": "#d0e7ff",
+            "color": "#000",
+            "font-weight": "bold"
+        }
+        
 
-
-# ------------------------------------------------------------
-# TRAIN / TEST SPLIT
-# ------------------------------------------------------------
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
-    test_size=0.2,
-    random_state=42
+    }
 )
 
 
-# ------------------------------------------------------------
-# MODEL SELECTION
-# ------------------------------------------------------------
-model_type = st.selectbox(
-    "Select Model:",
-    ["Linear Regression"]
-)
 
+# ============================================================
+# MODEL ENGINEERING HEADER
+# ============================================================
 
-# ------------------------------------------------------------
-# TRAIN MODEL
-# ------------------------------------------------------------
-if st.button("Train Model"):
+st.markdown("""
+<div style='background:#FDFBD4;padding:15px;border-radius:10px;margin-top:20px'>
+<b>Model Engineering</b>
+</div>
+""", unsafe_allow_html=True)
 
-    if model_type == "Linear Regression":
-        model = LinearRegression()
+# ============================================================
+# TIME SERIES FORECASTING (ARIMA)
+# ============================================================
 
+if selected_model == "Time-Series Forecasting":
 
+    import pandas as pd
+    import numpy as np
+    import plotly.graph_objects as go
+    import streamlit as st
 
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+    from sklearn.preprocessing import StandardScaler
+    from xgboost import XGBRegressor
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------
+    # DATA PREPARATION
+    # ------------------------------------------------------------
+
+    df_ts = df.copy()
+
+    df_ts["created_at"] = pd.to_datetime(
+        df_ts["created_at"],
+        format="mixed",
+        dayfirst=True,
+        errors="coerce"
+    )
+
+    df_ts = df_ts.dropna(subset=["created_at"])
+
+    # aggregate daily
+    df_ts["date_only"] = df_ts["created_at"].dt.date
+
+    df_ts = df_ts.groupby("date_only").agg({
+        target_column: "sum"
+    }).reset_index()
+
+    df_ts["created_at"] = pd.to_datetime(df_ts["date_only"])
+    df_ts.drop("date_only", axis=1, inplace=True)
+
+    df_ts = df_ts.sort_values("created_at")
+    df_ts.set_index("created_at", inplace=True)
+
+    df_ts = df_ts.asfreq("D")
+    df_ts[target_column] = df_ts[target_column].ffill()
+
+    # ------------------------------------------------------------
+    # 🔥 FEATURE ENGINEERING (STRONG)
+    # ------------------------------------------------------------
+
+    df_ts["lag_1"] = df_ts[target_column].shift(1)
+    df_ts["lag_7"] = df_ts[target_column].shift(7)
+    df_ts["lag_14"] = df_ts[target_column].shift(14)
+    df_ts["lag_30"] = df_ts[target_column].shift(30)
+
+    df_ts["rolling_mean_7"] = df_ts[target_column].rolling(7).mean()
+    df_ts["rolling_mean_14"] = df_ts[target_column].rolling(14).mean()
+    df_ts["rolling_std_7"] = df_ts[target_column].rolling(7).std()
+
+    # calendar features
+    df_ts["day_of_week"] = df_ts.index.dayofweek
+    df_ts["month"] = df_ts.index.month
+
+    df_ts = df_ts.dropna()
+
+    # ------------------------------------------------------------
+    # TRAIN TEST SPLIT
+    # ------------------------------------------------------------
+
+    y = df_ts[target_column]
+
+    X = df_ts.drop(columns=[target_column])
+
+    split_index = int(len(df_ts) * 0.8)
+
+    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
+    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
+
+    # ------------------------------------------------------------
+    # 🔥 SCALING (IMPORTANT)
+    # ------------------------------------------------------------
+
+    scaler_X = StandardScaler()
+
+    X_train_s = scaler_X.fit_transform(X_train)
+    X_test_s = scaler_X.transform(X_test)
+
+    # ------------------------------------------------------------
+    # 🔥 MODEL (POWERFUL)
+    # ------------------------------------------------------------
+
+    with st.spinner("Training XGBoost Model..."):
+
+        model = XGBRegressor(
+            n_estimators=300,
+            learning_rate=0.05,
+            max_depth=6,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42
+        )
+
+        model.fit(X_train_s, y_train)
+
+        predictions = model.predict(X_test_s)
+
+    # ------------------------------------------------------------
+    # POST PROCESSING
+    # ------------------------------------------------------------
+
+    predictions = np.maximum(predictions, 0)
+
+    # smooth slightly
+    predictions = pd.Series(predictions).rolling(3).mean().bfill().values
+
+    # ------------------------------------------------------------
     # METRICS
-    # --------------------------------------------------------
-    mae = mean_absolute_error(y_test, y_pred)
-    mse = mean_squared_error(y_test, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_test, y_pred)
+    # ------------------------------------------------------------
 
-    st.session_state["trained_model"] = model
+    mae = mean_absolute_error(y_test, predictions)
+    rmse = np.sqrt(mean_squared_error(y_test, predictions))
 
-    st.success("Model Trained Successfully")
+    mape = np.mean(
+        np.abs((y_test - predictions) / (y_test + 1e-5))
+    ) * 100
+
+    st.success("XGBoost Model Training Completed")
 
 
-    # ============================================================
-    # DISPLAY METRICS
-    # ============================================================
 
-    st.markdown("### Model Performance")
+    # ------------------------------------------------------------
+    # FEATURE IMPORTANCE (🔥 BONUS)
+    # ------------------------------------------------------------
+
+    importance = pd.DataFrame({
+        "Feature": X.columns,
+        "Importance": model.feature_importances_
+    }).sort_values(by="Importance", ascending=False).head(20)
 
     st.markdown(f"""
-    <div class="summary-grid">
-        <div class="summary-card">
-            <div class="summary-title">MAE</div>
-            <div class="summary-value">{mae:.4f}</div>
+    <div class="quality-card">
+        <div class="quality-title">
+            Feature Importance
         </div>
-        <div class="summary-card">
-            <div class="summary-title">RMSE</div>
-            <div class="summary-value">{rmse:.4f}</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-title">R² Score</div>
-            <div class="summary-value">{r2:.4f}</div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr>
+                    <th>#</th>
+                    <th>Feature</th>
+                    <th>Importance</th>
+                </tr>
+                {''.join([
+                    f"<tr><td>{i+1}</td><td>{row['Feature']}</td><td>{row['Importance']:.4f}</td></tr>"
+                    for i, row in importance.reset_index(drop=True).iterrows()
+                ])}
+            </table>
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-
- # ------------------------------------------------------------
+    
+# ============================================================
 # PROPHET MODEL
-# ------------------------------------------------------------
+# ============================================================
+
 elif selected_model == "Prophet Based Demand Forecast":
 
+    import pandas as pd
+    import numpy as np
+    import streamlit as st
     from prophet import Prophet
 
+    # =========================================
+    # STEP 1: FIX DATETIME
+    # =========================================
+    df["created_at"] = pd.to_datetime(
+        df["created_at"],
+        format="%d-%m-%Y %H:%M",
+        errors="coerce"
+    )
+
+    df = df.dropna(subset=["created_at"])
+
+    # =========================================
+    # STEP 2: BUILD PROPHET DATA
+    # =========================================
     prophet_df = pd.DataFrame({
         "ds": df["created_at"],
         "y": df[target_column]
     })
 
+    prophet_df = prophet_df.sort_values("ds").reset_index(drop=True)
+
+    # =========================================
+    # STEP 3: TRAIN TEST SPLIT
+    # =========================================
+    split_index = int(len(prophet_df) * 0.8)
+
+    train_df = prophet_df.iloc[:split_index]
+    test_df = prophet_df.iloc[split_index:]
+
+    # =========================================
+    # STEP 4: AUTO FREQUENCY
+    # =========================================
+    time_diff = prophet_df["ds"].diff().median()
+
+    if time_diff <= pd.Timedelta(hours=1):
+        freq = "H"
+    elif time_diff <= pd.Timedelta(days=1):
+        freq = "D"
+    elif time_diff <= pd.Timedelta(weeks=1):
+        freq = "W"
+    else:
+        freq = "M"
+
+
+    # =========================================
+    # STEP 5: TRAIN MODEL
+    # =========================================
     with st.spinner("Training Prophet Model..."):
 
-        model = Prophet()
-        model.fit(prophet_df)
+        model = Prophet(
+            daily_seasonality=True,
+            weekly_seasonality=True,
+            yearly_seasonality=True
+        )
 
-        future = model.make_future_dataframe(periods=len(y_test))
+        model.fit(train_df)
+
+        future = model.make_future_dataframe(
+            periods=len(test_df),
+            freq=freq
+        )
+
         forecast = model.predict(future)
 
-        predictions = forecast["yhat"].tail(len(y_test)).values
-        predictions = pd.Series(predictions, index=y_test.index)
+    # =========================================
+    # STEP 6: PIPELINE OUTPUT ONLY
+    # =========================================
+    predictions = forecast["yhat"].tail(len(test_df)).values
+    y_test = test_df["y"].values
+    dates = test_df["ds"].reset_index(drop=True)
 
     st.success("Prophet Model Training Completed")
 
 
-# ------------------------------------------------------------
-# MACHINE LEARNING MODELS
-# ------------------------------------------------------------
+
+
+# ============================================================
+# MACHINE LEARNING REGRESSION
+# ============================================================
+
 elif selected_model == "Machine Learning Regression Forecast":
+
+    st.markdown("## Feature Engineering")
+
+    numeric_df = df.select_dtypes(include=["int64","float64"]).copy()
+    numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
+    numeric_df = numeric_df.fillna(numeric_df.median())
+
+    X = numeric_df.drop(columns=[target_column])
+    y = numeric_df[target_column]
+
+    selection_mode = st.radio(
+        "Feature Selection Mode",
+        ["Automated","Manual"],
+        horizontal=True
+    )
+
+    # ✅ FIX 1: RESET WHEN MODE CHANGES
+    if "prev_mode" not in st.session_state:
+        st.session_state["prev_mode"] = selection_mode
+
+    if st.session_state["prev_mode"] != selection_mode:
+        st.session_state["scaled_X"] = None
+        st.session_state["original_X"] = None
+        st.session_state["scaling_applied"] = False
+
+    st.session_state["prev_mode"] = selection_mode
+
+    if selection_mode == "Manual":
+
+        feature_columns = X.columns.tolist()
+
+        if "selected_features" not in st.session_state:
+            st.session_state["selected_features"] = feature_columns[:5]
+
+        col1, col2 = st.columns([1,4])
+
+        with col1:
+            if st.button("Select All"):
+                st.session_state["selected_features"] = feature_columns.copy()
+
+        with col2:
+            if st.button("Clear All"):
+                st.session_state["selected_features"] = []
+
+        sorted_features = sorted(
+            feature_columns,
+            key=lambda x: x not in st.session_state["selected_features"]
+        )
+
+        feature_df = pd.DataFrame({
+            "Select": [col in st.session_state["selected_features"] for col in sorted_features],
+            "Feature": sorted_features
+        })
+
+        st.markdown("### Select Features")
+
+        edited_df = st.data_editor(
+            feature_df,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            column_config={
+                "Select": st.column_config.CheckboxColumn(width="small"),
+                "Feature": st.column_config.TextColumn(width="large")
+            }
+        )
+
+        selected_features = edited_df.loc[edited_df["Select"], "Feature"].tolist()
+        st.session_state["selected_features"] = selected_features
+        selected_features = st.session_state.get("selected_features", [])
+
+        if not selected_features:
+            st.warning("Please select at least one feature to train the model.")
+            st.stop()
+
+    else:
+
+        if "method_selection" not in st.session_state:
+            st.session_state.method_selection = "Correlation with Target"
+
+        if "scaled_X" not in st.session_state:
+            st.session_state["scaled_X"] = None
+
+        def method_tile(label):
+            active = st.session_state.method_selection == label
+
+            if active:
+                st.markdown(f"""
+                <div style="
+                    background-color:#163A70;
+                    color:white;
+                    padding:16px;
+                    border-radius:10px;
+                    font-weight:600;
+                    text-align:center;
+                    margin-bottom:12px;">
+                    {label}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                if st.button(label, use_container_width=True):
+                    st.session_state.method_selection = label
+                    st.rerun()
+
+        with st.expander(" ", expanded=True):
+
+            row1 = st.columns(2)
+            row2 = st.columns(2)
+
+            methods = [
+                "Correlation with Target",
+                "SelectKBest",
+                "Recursive Feature Elimination (RFE)",
+                "Mutual Information"
+            ]
+
+            with row1[0]: method_tile(methods[0])
+            with row1[1]: method_tile(methods[1])
+            with row2[0]: method_tile(methods[2])
+            with row2[1]: method_tile(methods[3])
+
+        method = st.session_state.method_selection
+
+        if method == "Correlation with Target":
+            corr = numeric_df.corr()[target_column].abs().sort_values(ascending=False)
+            selected_features = corr.index[1:21].tolist()
+
+        elif method == "SelectKBest":
+            selector = SelectKBest(f_regression, k=min(20, X.shape[1]))
+            selector.fit(X, y)
+            selected_features = X.columns[selector.get_support()].tolist()
+
+        elif method == "Recursive Feature Elimination (RFE)":
+            model_rfe = RandomForestRegressor()
+            rfe = RFE(model_rfe, n_features_to_select=min(20, X.shape[1]))
+            rfe.fit(X, y)
+            selected_features = X.columns[rfe.support_].tolist()
+
+        else:
+            mi = mutual_info_regression(X, y)
+            mi_series = pd.Series(mi, index=X.columns)
+            selected_features = mi_series.sort_values(ascending=False).head(20).index.tolist()
+
+    st.success(f"{len(selected_features)} Features Selected")
+
+    st.markdown(f"""
+    <div class="quality-card">
+        <div class="quality-title">
+            Selected Features ({selection_mode if selection_mode=="Manual" else method})
+        </div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr><th>#</th><th>Feature</th></tr>
+                {''.join([f"<tr><td>{i+1}</td><td>{f}</td></tr>" for i,f in enumerate(selected_features)])}
+            </table>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # APPLY FEATURES
+    if selection_mode == "Manual":
+        final_features = st.session_state.get("selected_features", [])
+        st.session_state["final_features"] = final_features
+    else:
+        final_features = selected_features
+        st.session_state["final_features"] = selected_features
+
+    # ============================================================
+    # SIMPLE RESET LOGIC (VERY CLEAN)
+    # ============================================================
+
+    current_state = (
+        selection_mode,
+        st.session_state.get("method_selection", ""),
+        len(final_features)
+    )
+
+    if "prev_state" not in st.session_state:
+        st.session_state["prev_state"] = current_state
+
+    if st.session_state["prev_state"] != current_state:
+        st.session_state["scaled_X"] = None
+        st.session_state["scaling_applied"] = False
+        st.warning("⚠️ Selection changed → Please apply Feature Scaling again")
+
+    st.session_state["prev_state"] = current_state
+
+    X_selected = df[final_features].copy()
+
+    # ✅ FIX: HANDLE NaN (ONLY ADD THIS)
+    X_selected = X_selected.replace([np.inf, -np.inf], np.nan)
+    X_selected = X_selected.fillna(X_selected.median())
+
+    X = X_selected.copy()
+
+    # FEATURE IMPORTANCE
+    from sklearn.inspection import permutation_importance
+    from sklearn.linear_model import LinearRegression
+
+    st.markdown("## Feature Importance")
+
+    temp_model = LinearRegression()
+    temp_model.fit(X, y)
+
+    result = permutation_importance(temp_model, X, y, n_repeats=10, random_state=42)
+    importance = pd.Series(result.importances_mean, index=X.columns)
+    importance = importance.clip(lower=0)
+    top_features = importance.sort_values(ascending=False)
+
+    st.markdown(f"""
+    <div class="quality-card">
+        <div class="quality-title">Feature Importance</div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr><th>#</th><th>Feature</th><th>Importance</th></tr>
+                {''.join([f"<tr><td>{i+1}</td><td>{feat}</td><td>{val:.4f}</td></tr>"
+                for i,(feat,val) in enumerate(top_features.items())])}
+            </table>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    from sklearn.preprocessing import StandardScaler
+
+    if "scaled_X" not in st.session_state:
+        st.session_state["scaled_X"] = None
+    if "original_X" not in st.session_state:
+        st.session_state["original_X"] = None
+    if "scaling_applied" not in st.session_state:
+        st.session_state["scaling_applied"] = False
+
+    st.session_state["original_X"] = X_selected.copy()
+
+    st.markdown("## Feature Scaling")
+
+    if st.button("Apply Feature Scaling"):
+
+        scaler = StandardScaler()
+        scaled_values = scaler.fit_transform(X_selected.copy())
+
+        scaled_df = pd.DataFrame(
+            scaled_values,
+            columns=X_selected.columns,
+            index=X_selected.index
+        )
+
+        st.session_state["scaled_X"] = scaled_df
+        st.session_state["scaling_applied"] = True
+
+        st.success("Scaling Applied")
+
+    if st.session_state.get("scaling_applied") and st.session_state.get("scaled_X") is not None:
+
+        original_X = st.session_state["original_X"]
+        scaled_df = st.session_state["scaled_X"]
+
+        st.markdown(f"""
+        <div class="quality-card">
+            <div class="quality-title">Before Scaling</div>
+            <div class="table-scroll">
+                <table class="clean-table">
+                    <tr>{''.join([f"<th>{c}</th>" for c in original_X.columns])}</tr>
+                    {''.join([f"<tr>{''.join([f'<td>{v:.2f}</td>' for v in row])}</tr>"
+                    for row in original_X.head(10).values])}
+                </table>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div class="quality-card">
+            <div class="quality-title">After Scaling</div>
+            <div class="table-scroll">
+                <table class="clean-table">
+                    <tr>{''.join([f"<th>{c}</th>" for c in scaled_df.columns])}</tr>
+                    {''.join([f"<tr>{''.join([f'<td>{v:.2f}</td>' for v in row])}</tr>"
+                    for row in scaled_df.head(10).values])}
+                </table>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    if st.session_state.get("scaled_X") is None:
+        st.warning("⚠️ Please apply Feature Scaling before training the model.")
+        st.stop()
+
+    # ✅ FIX 3: FORCE FRESH DATA
+    X = st.session_state["scaled_X"].copy()
+
+    split_index = int(len(X) * 0.8)
+    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
+    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
 
     model_choice = st.radio(
         "Select ML Model",
-        ["Linear Regression", "Random Forest", "XGBoost"],
+        ["Linear Regression","Random Forest","XGBoost"],
         horizontal=True
     )
 
     if model_choice == "Linear Regression":
-
         model = LinearRegression()
-
     elif model_choice == "Random Forest":
-
-        model = RandomForestRegressor(
-            n_estimators=200,
-            random_state=42
-        )
-
-    else:
-
+        model = RandomForestRegressor(n_estimators=100,max_features="sqrt",random_state=42)
+    elif model_choice == "XGBoost":
         model = xgb.XGBRegressor(
             n_estimators=300,
+            max_depth=6,
             learning_rate=0.05,
-            max_depth=5,
             subsample=0.8,
             colsample_bytree=0.8,
             random_state=42
         )
 
     with st.spinner("Training ML Model..."):
-
         model.fit(X_train, y_train)
-        predictions = model.predict(X_test)
 
-        predictions = pd.Series(predictions, index=y_test.index)
+    predictions = model.predict(X_test)
 
-    st.success("ML Model Training Completed")
-
-
-# ------------------------------------------------------------
+# ============================================================
 # DEEP LEARNING MODEL
-# ------------------------------------------------------------
+# ============================================================
 elif selected_model == "Deep Learning Forecast":
 
-    from sklearn.neural_network import MLPRegressor
+    st.markdown("## Feature Engineering")
 
-    model = MLPRegressor(
-        hidden_layer_sizes=(128,64),
-        max_iter=400,
-        random_state=42
+    # ============================================================
+    # 🔥 DATETIME FIX (SAME FLOW START)
+    # ============================================================
+    if "created_at" in df.columns:
+        df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+        df = df.dropna(subset=["created_at"])
+        df = df.sort_values("created_at")
+
+        df["day_of_week"] = df["created_at"].dt.dayofweek
+        df["month"] = df["created_at"].dt.month
+    else:
+        df["time_index"] = range(len(df))
+        df["day_of_week"] = df["time_index"] % 7
+        df["month"] = (df["time_index"] // 30) % 12
+
+    # ============================================================
+    # 🔥 LAG FEATURES (SAME AS ML STEP FLOW)
+    # ============================================================
+    for lag in [1,2,3,7,14]:
+        df[f"lag_{lag}"] = df[target_column].shift(lag)
+
+    df["rolling_mean_7"] = df[target_column].rolling(7).mean()
+    df["rolling_std_7"] = df[target_column].rolling(7).std()
+
+    df = df.dropna()
+
+    # ============================================================
+    # CLEAN
+    # ============================================================
+    numeric_df = df.select_dtypes(include=["int64","float64"]).copy()
+    numeric_df = numeric_df.fillna(numeric_df.median())
+
+    X = numeric_df.drop(columns=[target_column])
+    y = numeric_df[target_column]
+
+    # ============================================================
+    # FEATURE SELECTION (MATCH ML SIMPLICITY)
+    # ============================================================
+    selection_mode = st.radio(
+        "Feature Selection Mode",
+        ["Use All Features", "Manual"],
+        horizontal=True
     )
 
-    with st.spinner("Training Deep Learning Model..."):
+    if selection_mode == "Use All Features":
+        selected_features = X.columns.tolist()
+    else:
+        selected_features = st.multiselect(
+            "Select Features",
+            X.columns.tolist(),
+            default=X.columns.tolist()
+        )
+
+    st.success(f"{len(selected_features)} Features Selected")
+
+    # ============================================================
+    # FEATURE TABLE (ML STYLE CARD)
+    # ============================================================
+    feature_rows = ""
+    for i, f in enumerate(selected_features):
+        feature_rows += f"<tr><td>{i+1}</td><td>{f}</td></tr>"
+
+    st.markdown(f"""
+    <div class="quality-card">
+        <div class="quality-title">Selected Features</div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr><th>#</th><th>Feature</th></tr>
+                {feature_rows}
+            </table>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ============================================================
+    # SCALING (IDENTICAL ML UI)
+    # ============================================================
+    st.markdown("## Feature Scaling")
+
+    X_selected = df[selected_features].copy()
+
+    if st.button("Apply Feature Scaling"):
+
+        scaler = StandardScaler()
+        scaled = scaler.fit_transform(X_selected)
+
+        st.session_state["scaled_X_dl"] = pd.DataFrame(scaled, columns=selected_features)
+        st.session_state["original_X_dl"] = X_selected.copy()
+
+        st.success("Scaling Applied")
+
+    if st.session_state.get("scaled_X_dl") is None:
+        st.warning("Apply scaling first")
+        st.stop()
+
+    original = st.session_state["original_X_dl"]
+    scaled = st.session_state["scaled_X_dl"]
+
+    # TABLE BUILDER (SAFE)
+    def build_table(data):
+        rows = ""
+        for row in data.head(10).values:
+            row_html = "<tr>"
+            for v in row:
+                try:
+                    row_html += f"<td>{float(v):.2f}</td>"
+                except:
+                    row_html += f"<td>{v}</td>"
+            row_html += "</tr>"
+            rows += row_html
+        return rows
+
+    # BEFORE
+    st.markdown(f"""
+    <div class="quality-card">
+        <div class="quality-title">Before Scaling</div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr>{"".join([f"<th>{c}</th>" for c in original.columns])}</tr>
+                {build_table(original)}
+            </table>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # AFTER
+    st.markdown(f"""
+    <div class="quality-card">
+        <div class="quality-title">After Scaling</div>
+        <div class="table-scroll">
+            <table class="clean-table">
+                <tr>{"".join([f"<th>{c}</th>" for c in scaled.columns])}</tr>
+                {build_table(scaled)}
+            </table>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ============================================================
+    # MODEL SELECTION (ML STYLE RADIO)
+    # ============================================================
+    model_choice = st.radio(
+        "Select Deep Learning Model",
+        [
+            "MLP (Multi-Layer Perceptron)",
+            "LSTM (Long Short-Term Memory)",
+            "GRU (Gated Recurrent Unit)"
+        ],
+        horizontal=True
+    )
+
+    X_scaled = scaled.values
+    split = int(len(X_scaled)*0.8)
+
+    # ============================================================
+    # 🔵 MLP (BEST FOR YOUR DATA)
+    # ============================================================
+    if "MLP" in model_choice:
+
+        from sklearn.neural_network import MLPRegressor
+
+        X_train = X_scaled[:split]
+        X_test = X_scaled[split:]
+
+        y_train = y.iloc[:split]
+        y_test = y.iloc[split:]
+
+        model = MLPRegressor(
+            hidden_layer_sizes=(256,128,64),
+            max_iter=1500
+        )
 
         model.fit(X_train, y_train)
         predictions = model.predict(X_test)
 
-        predictions = pd.Series(predictions, index=y_test.index)
+    # ============================================================
+    # 🔵 LSTM / GRU (SEQUENCE)
+    # ============================================================
+    else:
 
-    st.success("Deep Learning Model Training Completed")
+        def create_sequences(X, y, steps=7):
+            Xs, ys = [], []
+            for i in range(len(X) - steps):
+                Xs.append(X[i:i+steps])
+                ys.append(y.iloc[i+steps])
+            return np.array(Xs), np.array(ys)
+
+        X_seq, y_seq = create_sequences(X_scaled, y)
+
+        split = int(len(X_seq)*0.8)
+
+        X_train, X_test = X_seq[:split], X_seq[split:]
+        y_train, y_test = y_seq[:split], y_seq[split:]
+
+        import tensorflow as tf
+
+        if "LSTM" in model_choice:
+            model = tf.keras.Sequential([
+                tf.keras.layers.LSTM(64, return_sequences=True),
+                tf.keras.layers.LSTM(32),
+                tf.keras.layers.Dense(1)
+            ])
+        else:
+            model = tf.keras.Sequential([
+                tf.keras.layers.GRU(64, return_sequences=True),
+                tf.keras.layers.GRU(32),
+                tf.keras.layers.Dense(1)
+            ])
+
+        model.compile(optimizer="adam", loss="mse")
+        model.fit(X_train, y_train, epochs=60, verbose=0)
+
+        predictions = model.predict(X_test).flatten()
+
+    # ============================================================
+    # FINAL SAFETY FIX (MATCH ML END)
+    # ============================================================
+    min_len = min(len(y_test), len(predictions))
+    y_test = y_test[:min_len]
+    predictions = predictions[:min_len]
+# ============================================================
+# MODEL EVALUATION
+# ============================================================
+
+if "predictions" in locals():
+
+    st.markdown("""
+    <div style='background:#FFF3CD;padding:15px;border-radius:10px;margin-top:25px'>
+    <b>Model Insights</b>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ------------------------------------------------------------
+    # CLEAN DATA BEFORE EVALUATION
+    # ------------------------------------------------------------
+
+    y_test = pd.Series(y_test).reset_index(drop=True)
+    predictions = pd.Series(predictions).reset_index(drop=True)
+
+    mask = ~(y_test.isna() | predictions.isna())
+
+    y_test = y_test[mask]
+    predictions = predictions[mask]
+
+    # ------------------------------------------------------------
+    # CHECK DATA SIZE
+    # ------------------------------------------------------------
+
+    if len(y_test) == 0 or len(predictions) == 0:
+
+        st.error("Model produced no valid predictions to evaluate.")
+        st.stop()
+
+    # ------------------------------------------------------------
+    # METRICS
+    # ------------------------------------------------------------
 
 
+    if selected_model in [
+        "Machine Learning Regression Forecast",
+        "Deep Learning Forecast"
+    ]:
+
+        mae = mean_absolute_error(y_test, predictions)
+        r2 = r2_score(y_test, predictions)
+
+        col1, col2 = st.columns(2)
+
+        col1.metric("Mean Absolute Error", round(mae,2))
+        col2.metric("R² Score", round(r2,3))
+
+    else:
+        st.info("Time-series models are evaluated visually through forecast plots.")
+
+    # ------------------------------------------------------------
+    # VISUALIZATION
+    # ------------------------------------------------------------
+    # 🔥 use real datetime index instead of range
+    # ============================================================
+    # FINAL SAFE DATE HANDLING (NO df_ts ERROR EVER)
+    # ============================================================
+
+    try:
+        # ARIMA / Time-Series case
+        if selected_model == "Time-Series Forecasting":
+            dates = df_ts.index[split_index:]
+
+        # Prophet case
+        elif selected_model == "Prophet Based Demand Forecast":
+            dates = test_df["ds"].reset_index(drop=True)
+
+        # ML / DL case
+        else:
+            if "created_at" in df.columns:
+                dates = pd.to_datetime(df["created_at"]).iloc[-len(y_test):].reset_index(drop=True)
+            else:
+                dates = range(len(y_test))
+
+    except:
+        # FINAL FALLBACK (never crash)
+        dates = range(len(y_test))
+
+    timeline_df = pd.DataFrame({
+        "date": dates,
+        "actual": y_test.values,
+        "predicted": predictions
+    })
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=timeline_df["date"],
+        y=timeline_df["actual"],
+        mode="lines+markers",
+        name="Actual Demand",
+        line=dict(color="royalblue", width=3)
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=timeline_df["date"],
+        y=timeline_df["predicted"],
+        mode="lines",
+        name="Forecasted Demand",
+        line=dict(color="green", dash="dash", width=3)
+    ))
+
+    fig.update_layout(
+        title="Demand Forecasting Timeline",
+        xaxis_title="Date",
+        yaxis_title="Units Sold",
+        template="plotly_white",
+        hovermode="x unified"
+    )
+
+    # 🔥 nice date formatting
+    fig.update_xaxes(
+        tickformat="%b %d\n%Y"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+   
 # ============================================================
 # FOOTER
 # ============================================================
