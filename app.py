@@ -5296,7 +5296,15 @@ elif selected_model == "Machine Learning Forecast":
         elif name == "Random Forest":
             return RandomForestRegressor(n_estimators=200, max_depth=10)
         elif name == "XGBoost":
-            return XGBRegressor(n_estimators=300, max_depth=6, learning_rate=0.05)
+            return XGBRegressor(
+                n_estimators=200,
+                max_depth=5,
+                learning_rate=0.05,
+                n_jobs=1,              # 🚨 VERY IMPORTANT (fix server freeze)
+                verbosity=0,           # no logs blocking
+                tree_method="hist",    # faster + stable on CPU
+                random_state=42
+            )
 
     # ============================================================
     # TRAIN PIPELINE
