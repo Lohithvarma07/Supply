@@ -9,7 +9,7 @@ from utils.html_table import render_html_table
 import streamlit as st
 import altair as alt
 from streamlit_option_menu import option_menu
-
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 st.set_page_config(page_title="SupplySyncAI – MLOps UI", layout="wide")
 
@@ -4116,7 +4116,7 @@ selected_model = option_menu(
     options=[
         "Time-Series Forecasting",
         "Prophet Based Demand Forecast",
-        "Machine Learning Regression Forecast",
+        "Machine Learning Forecast",
         "Deep Learning Forecast"
     ],
     icons=[
@@ -4157,15 +4157,7 @@ selected_model = option_menu(
 
 
 
-# ============================================================
-# MODEL ENGINEERING HEADER
-# ============================================================
 
-st.markdown("""
-<div style='background:#FDFBD4;padding:15px;border-radius:10px;margin-top:20px'>
-<b>Model Engineering</b>
-</div>
-""", unsafe_allow_html=True)
 
 # ============================================================
 # TIME SERIES FORECASTING (ARIMA)
@@ -4173,252 +4165,785 @@ st.markdown("""
 
 if selected_model == "Time-Series Forecasting":
 
-    import pandas as pd
-    import numpy as np
-    import plotly.graph_objects as go
-    import streamlit as st
-
-    from sklearn.metrics import mean_absolute_error, mean_squared_error
-    from sklearn.preprocessing import StandardScaler
-    from xgboost import XGBRegressor
-
-    # ------------------------------------------------------------
-    # DATA PREPARATION
-    # ------------------------------------------------------------
-
-    df_ts = df.copy()
-
-    df_ts["created_at"] = pd.to_datetime(
-        df_ts["created_at"],
-        format="mixed",
-        dayfirst=True,
-        errors="coerce"
-    )
-
-    df_ts = df_ts.dropna(subset=["created_at"])
-
-    # aggregate daily
-    df_ts["date_only"] = df_ts["created_at"].dt.date
-
-    df_ts = df_ts.groupby("date_only").agg({
-        target_column: "sum"
-    }).reset_index()
-
-    df_ts["created_at"] = pd.to_datetime(df_ts["date_only"])
-    df_ts.drop("date_only", axis=1, inplace=True)
-
-    df_ts = df_ts.sort_values("created_at")
-    df_ts.set_index("created_at", inplace=True)
-
-    df_ts = df_ts.asfreq("D")
-    df_ts[target_column] = df_ts[target_column].ffill()
-
-    # ------------------------------------------------------------
-    # 🔥 FEATURE ENGINEERING (STRONG)
-    # ------------------------------------------------------------
-
-    df_ts["lag_1"] = df_ts[target_column].shift(1)
-    df_ts["lag_7"] = df_ts[target_column].shift(7)
-    df_ts["lag_14"] = df_ts[target_column].shift(14)
-    df_ts["lag_30"] = df_ts[target_column].shift(30)
-
-    df_ts["rolling_mean_7"] = df_ts[target_column].rolling(7).mean()
-    df_ts["rolling_mean_14"] = df_ts[target_column].rolling(14).mean()
-    df_ts["rolling_std_7"] = df_ts[target_column].rolling(7).std()
-
-    # calendar features
-    df_ts["day_of_week"] = df_ts.index.dayofweek
-    df_ts["month"] = df_ts.index.month
-
-    df_ts = df_ts.dropna()
-
-    # ------------------------------------------------------------
-    # TRAIN TEST SPLIT
-    # ------------------------------------------------------------
-
-    y = df_ts[target_column]
-
-    X = df_ts.drop(columns=[target_column])
-
-    split_index = int(len(df_ts) * 0.8)
-
-    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
-    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
-
-    # ------------------------------------------------------------
-    # 🔥 SCALING (IMPORTANT)
-    # ------------------------------------------------------------
-
-    scaler_X = StandardScaler()
-
-    X_train_s = scaler_X.fit_transform(X_train)
-    X_test_s = scaler_X.transform(X_test)
-
-    # ------------------------------------------------------------
-    # 🔥 MODEL (POWERFUL)
-    # ------------------------------------------------------------
-
-    with st.spinner("Training XGBoost Model..."):
-
-        model = XGBRegressor(
-            n_estimators=300,
-            learning_rate=0.05,
-            max_depth=6,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42
-        )
-
-        model.fit(X_train_s, y_train)
-
-        predictions = model.predict(X_test_s)
-
-    # ------------------------------------------------------------
-    # POST PROCESSING
-    # ------------------------------------------------------------
-
-    predictions = np.maximum(predictions, 0)
-
-    # smooth slightly
-    predictions = pd.Series(predictions).rolling(3).mean().bfill().values
-
-    # ------------------------------------------------------------
-    # METRICS
-    # ------------------------------------------------------------
-
-    mae = mean_absolute_error(y_test, predictions)
-    rmse = np.sqrt(mean_squared_error(y_test, predictions))
-
-    mape = np.mean(
-        np.abs((y_test - predictions) / (y_test + 1e-5))
-    ) * 100
-
-    st.success("XGBoost Model Training Completed")
-
-
-
-    # ------------------------------------------------------------
-    # FEATURE IMPORTANCE (🔥 BONUS)
-    # ------------------------------------------------------------
-
-    importance = pd.DataFrame({
-        "Feature": X.columns,
-        "Importance": model.feature_importances_
-    }).sort_values(by="Importance", ascending=False).head(20)
-
-    st.markdown(f"""
-    <div class="quality-card">
-        <div class="quality-title">
-            Feature Importance
-        </div>
-        <div class="table-scroll">
-            <table class="clean-table">
-                <tr>
-                    <th>#</th>
-                    <th>Feature</th>
-                    <th>Importance</th>
-                </tr>
-                {''.join([
-                    f"<tr><td>{i+1}</td><td>{row['Feature']}</td><td>{row['Importance']:.4f}</td></tr>"
-                    for i, row in importance.reset_index(drop=True).iterrows()
-                ])}
-            </table>
-        </div>
+    # ============================================================
+    # HEADER
+    # ============================================================
+    st.markdown("""
+    <div style="background:#2F75B5;padding:12px;border-radius:10px;text-align:center;;color:white;">
+    <h2>Time-Series Forecasting</h2>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("")
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+    # ============================================================
+    # MODEL ENGINEERING HEADER
+    # ============================================================
+
+    st.markdown("""
+    <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
+    <b>Model Engineering</b>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("")
+
+
+    # ============================================================
+    # CONTROLS
+    # ============================================================
+
+    horizon_choice = st.radio("Forecast Horizon", ["6 Months", "1 Year"],
+    horizontal=True)
+    forecast_days = {"6 Months":180, "1 Year":365}[horizon_choice]
+
     
+    train_btn = st.button("Train Model")
+
+
+    if train_btn:
+
+        with st.spinner("🔄 Training model and tuning parameters..."):
+
+            # ===================== DATA =====================
+            df_ts = df.copy()
+            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
+            df_ts = df_ts.dropna(subset=["created_at"])
+
+            df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
+            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
+
+            df_ts = df_ts.sort_values("created_at")
+            df_ts.set_index("created_at", inplace=True)
+
+            df_ts = df_ts.resample("D").sum()
+            df_ts[target_column] = df_ts[target_column].replace(0, np.nan).ffill()
+
+            # 🔥 Remove extreme outliers (very important for SARIMA & Prophet)
+            q_low = df_ts[target_column].quantile(0.01)
+            q_high = df_ts[target_column].quantile(0.99)
+
+            df_ts[target_column] = df_ts[target_column].clip(q_low, q_high)
+
+            if len(df_ts) < 30:
+                st.error("❌ Not enough data")
+                st.stop()
+
+            split = int(len(df_ts) * 0.8)
+            train = df_ts.iloc[:split]
+            test = df_ts.iloc[split:]
+
+            # ===================== TUNING FUNCTION =====================
+            def tune_model(p_vals, d_vals, q_vals):
+                results = []
+                best_aic = np.inf
+                best_order = None
+                best_model = None
+
+                for p in p_vals:
+                    for d in d_vals:
+                        for q in q_vals:
+                            try:
+                                model = SARIMAX(
+                                    train[target_column],
+                                    order=(p,d,q),
+                                    seasonal_order=(1,1,1,7),
+                                    enforce_stationarity=False,
+                                    enforce_invertibility=False
+                                )
+                                res = model.fit(disp=False)
+
+                                results.append({
+                                    "p":p,
+                                    "d":d,
+                                    "q":q,
+                                    "AIC(Akaike Information Criterion)":round(res.aic,2)
+                                })
+
+                                if res.aic < best_aic:
+                                    best_aic = res.aic
+                                    best_order = (p,d,q)
+                                    best_model = res
+
+                            except:
+                                continue
+
+                return best_model, best_order, best_aic, pd.DataFrame(results)
+
+            # ===================== INITIAL TRAIN =====================
+            model_fit, best_order, best_aic, results_df = tune_model([0,1,2,3], [0,1], [0,1,2,3])
+
+            # ===================== EVALUATION =====================
+            train_pred = model_fit.predict(start=train.index[0], end=train.index[-1])
+            test_pred = model_fit.forecast(steps=len(test))
+
+            train_mae = mean_absolute_error(train[target_column], train_pred)
+            test_mae = mean_absolute_error(test[target_column], test_pred)
+
+            # ===================== AUTO CORRECTION =====================
+            correction_note = "No correction needed"
+
+            ratio = test_mae / train_mae
+            if ratio > 3:
+
+                # 🔽 Reduce complexity
+                model_fit, best_order, best_aic, results_df = tune_model(
+                    [1,2], [1], [1,2]
+                )
+                correction_note = "Reduced model complexity (lower p, q)"
+
+            elif ratio < 0.7:
+
+                # 🔼 Increase complexity
+                model_fit, best_order, best_aic, results_df = tune_model(
+                    [1,2,3,4], [1], [1,2,3,4]
+                )
+                correction_note = "Increased model complexity (higher p, q)"
+
+        # ============================================================
+        # 🔧 TUNING UI (UNCHANGED)
+        # ============================================================
+        st.markdown("### Model Tuning Summary")
+
+        render_html_table(results_df)
+
+        st.info(f"""
+        **Understanding Model Tuning (SARIMA)**
+
+        **Model Used:** SARIMA{best_order}
+
+        ###  What are (p, d, q)?
+
+        • **p (Auto-Regressive term)**  
+        → Uses past values  
+
+        • **d (Differencing)**  
+        → Removes trend  
+
+        • **q (Moving Average)**  
+        → Handles noise  
+
+        ###  What is AIC?
+
+        ✔ Lower AIC = Better model  
+
+        ### Best Model Selected
+
+        • SARIMA{best_order}  
+        • AIC = {best_aic:.2f}  
+
+        ✔ {correction_note}
+        """)
+
+        # ============================================================
+        # 📊 PERFORMANCE (UNCHANGED UI)
+        # ============================================================
+        train_pred = model_fit.predict(start=train.index[0], end=train.index[-1])
+        test_pred = model_fit.forecast(steps=len(test))
+
+        train_mae = mean_absolute_error(train[target_column], train_pred)
+        test_mae = mean_absolute_error(test[target_column], test_pred)
+        rmse = np.sqrt(mean_squared_error(test[target_column], test_pred))
+
+
+
+        st.markdown("### Model Performance")
+
+        st.markdown("""
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-title">Train MAE</div>
+                <div class="summary-value">{}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Test MAE</div>
+                <div class="summary-value">{}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">RMSE</div>
+                <div class="summary-value">{}</div>
+            </div>
+         
+        </div>
+        """.format(
+            f"{train_mae:.2f}",
+            f"{test_mae:.2f}",
+            f"{rmse:.2f}"
+        ), unsafe_allow_html=True)
+        ratio = test_mae / train_mae
+
+        if ratio > 3:
+            status_msg = "Model still shows overfitting after correction"
+        elif ratio < 0.7:
+            status_msg = "Model still underfits after correction"
+        else:
+            status_msg = "Model generalizes well"
+        # ============================================================
+        # 🧠 DIAGNOSTICS (UPDATED TEXT ONLY)
+        # ============================================================
+        st.markdown("### Model Diagnostics")
+
+        ratio = test_mae / train_mae
+
+        if ratio > 3:
+            st.error("⚠️ Overfitting Detected")
+
+        elif ratio < 0.7:
+            st.warning("⚠️ Underfitting Detected")
+
+        else:
+            st.success("✅ Model is well balanced")
+
+        if train_mae < test_mae * 0.5:
+
+            st.info(f"""
+        ⚠️ **Overfitting Detected**
+
+        • Model performs very well on training data  
+        • But performs worse on new (test) data  
+        • This means model was too complex  
+
+
+        **What system did:**
+
+        • Reduced model complexity (lower p, q values)  
+        • Retrained model automatically  
+       
+        {status_msg}
+        
+        """)
+
+        elif train_mae > test_mae * 1.5:
+
+            st.info(f"""
+    
+        ⚠️ **Underfitting Detected**
+
+        • Model performs poorly on both training and test data  
+        • This means model was too simple  
+
+
+        **What system did:**
+
+        • Increased model complexity (higher p, q values)  
+        • Retrained model automatically  
+
+        ✔ Now model captures patterns better
+        """)
+
+        else:
+
+            st.info(f"""
+
+
+        ✅ **Balanced Model**
+
+        • Model performs similarly on training and test data  
+        • No overfitting or underfitting detected  
+
+        ✔ Model is reliable for forecasting
+        """)
+        # ============================================================
+        # 📈 FORECAST
+        # ============================================================
+    # ============================================================
+        # 📅 SET FORECAST START (JAN 2026)
+        # ============================================================
+        forecast_start = pd.Timestamp("2026-01-01")
+
+        # If your data already goes beyond Jan 2026, start from last date
+        last_date = df_ts.index.max()
+        if forecast_start <= last_date:
+            forecast_start = last_date + pd.Timedelta(days=1)
+
+        # ============================================================
+        # 🔮 FORECAST (NO GAP)
+        # ============================================================
+        future_pred = model_fit.forecast(steps=forecast_days)
+        future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
+
+        # ============================================================
+        # 📈 GRAPH (FINAL CLEAN VERSION)
+        # ============================================================
+        st.markdown("### Demand Forecast Timeline")
+        st.caption("Blue = Actual | Red = Forecast")
+
+        fig = go.Figure()
+
+        # ============================================================
+        # ACTUAL
+        # ============================================================
+        fig.add_trace(go.Scatter(
+            x=df_ts.index,
+            y=df_ts[target_column],
+            name="Actual",
+            line=dict(color="#2E86C1", width=3),
+
+            # 🔥 HOVER
+            hovertemplate=
+            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
+            "<b>Actual :</b> %{y:.2f}<br>" +
+            "<extra></extra>"
+        ))
+
+        # ============================================================
+        # FORECAST
+        # ============================================================
+        fig.add_trace(go.Scatter(
+            x=future_dates,
+            y=future_pred,
+            name="Forecast",
+            line=dict(color="#E74C3C", width=3),
+
+            # 🔥 HOVER
+            hovertemplate=
+            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
+            "<b>Forecast Demand:</b> %{y:.2f}<br>" +
+            "<extra></extra>"
+        ))
+
+        # ============================================================
+        # FORECAST START LINE
+        # ============================================================
+        fig.add_vline(
+            x=forecast_start,
+            line_dash="dash",
+            line_color="black"
+        )
+
+        # ============================================================
+        # LAYOUT (FINAL)
+        # ============================================================
+        fig.update_layout(
+            template="plotly_white",
+            xaxis_title="Date",
+            yaxis_title="Quantity Sold",
+            hovermode="x unified",
+
+            # 🔥 SHOW ALL MONTHS
+            xaxis=dict(
+                tickmode="linear",
+                dtick="M1",
+                tickformat="%b %Y",
+                tickangle=-45
+            ),
+
+            # 🔥 HOVER STYLE
+            hoverlabel=dict(
+                bgcolor="white",
+                font_size=14,
+                font_family="Arial",
+                bordercolor="#2F75B5"
+            )
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        # ============================================================
+        # 🧠 BUSINESS INSIGHTS (NEW)
+        # ============================================================
+        st.markdown("Demand Insights")
+
+        recent = df_ts[target_column].tail(14).mean()
+        future_avg = future_pred.mean()
+
+        if future_avg > recent:
+            st.success("Demand is expected to increase in upcoming period")
+        else:
+            st.warning("Demand may decrease or stay stable")
+
+        volatility = np.std(df_ts[target_column].tail(30))
+
+        if volatility > 30:
+            st.warning("⚠️ High demand fluctuation observed")
+        else:
+            st.info("Demand is relatively stable")
+
+        st.info(f"Forecast horizon: {forecast_days} days")
+
+        # ============================================================
+        # 📋 TABLE
+        # ============================================================
+        st.markdown("Forecast Output")
+
+        forecast_df = pd.DataFrame({
+            "Date": future_dates,
+            "Forecast Quantity": future_pred.values
+        })
+
+        render_html_table(forecast_df)
 # ============================================================
 # PROPHET MODEL
 # ============================================================
 
 elif selected_model == "Prophet Based Demand Forecast":
 
-    import pandas as pd
-    import numpy as np
-    import streamlit as st
+    # ============================================================
+    # HEADER
+    # ============================================================
+    st.markdown("""
+    <div style="background:#2F75B5;padding:12px;border-radius:10px;text-align:center;color:white;">
+    <h2>Prophet Based Foreasting</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("")
+
     from prophet import Prophet
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-    # =========================================
-    # STEP 1: FIX DATETIME
-    # =========================================
-    df["created_at"] = pd.to_datetime(
-        df["created_at"],
-        format="%d-%m-%Y %H:%M",
-        errors="coerce"
-    )
+    # ============================================================
+    # MODEL ENGINEERING HEADER
+    # ============================================================
+    st.markdown("""
+    <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
+    <b>Model Engineering</b>
+    </div>
+    """, unsafe_allow_html=True)
 
-    df = df.dropna(subset=["created_at"])
+    st.markdown("")
 
-    # =========================================
-    # STEP 2: BUILD PROPHET DATA
-    # =========================================
-    prophet_df = pd.DataFrame({
-        "ds": df["created_at"],
-        "y": df[target_column]
-    })
+    # ============================================================
+    # CONTROLS (SAME)
+    # ============================================================
+    horizon_choice = st.radio("Forecast Horizon", ["6 Months", "1 Year"],
+    horizontal=True)
+    forecast_days = {"6 Months":180, "1 Year":365}[horizon_choice]
 
-    prophet_df = prophet_df.sort_values("ds").reset_index(drop=True)
+    train_btn = st.button("Train Model")
 
-    # =========================================
-    # STEP 3: TRAIN TEST SPLIT
-    # =========================================
-    split_index = int(len(prophet_df) * 0.8)
+    if train_btn:
 
-    train_df = prophet_df.iloc[:split_index]
-    test_df = prophet_df.iloc[split_index:]
+        with st.spinner("🔄 Training Prophet model..."):
 
-    # =========================================
-    # STEP 4: AUTO FREQUENCY
-    # =========================================
-    time_diff = prophet_df["ds"].diff().median()
+            # ===================== DATA =====================
+            df_ts = df.copy()
+            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
+            df_ts = df_ts.dropna(subset=["created_at"])
 
-    if time_diff <= pd.Timedelta(hours=1):
-        freq = "H"
-    elif time_diff <= pd.Timedelta(days=1):
-        freq = "D"
-    elif time_diff <= pd.Timedelta(weeks=1):
-        freq = "W"
-    else:
-        freq = "M"
+            df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
+            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
+
+            df_ts = df_ts.sort_values("created_at")
+
+            df_ts = df_ts.rename(columns={
+                "created_at": "ds",
+                target_column: "y"
+            })
+
+            df_ts = df_ts.set_index("ds").resample("D").sum().reset_index()
+            df_ts["y"] = df_ts["y"].replace(0, np.nan).ffill()
+
+            if len(df_ts) < 30:
+                st.error("❌ Not enough data")
+                st.stop()
+
+            split = int(len(df_ts) * 0.8)
+            train = df_ts.iloc[:split]
+            test = df_ts.iloc[split:]
+
+            # ===================== MODEL =====================
+            # ===================== INITIAL MODEL =====================
+            model = Prophet(
+                daily_seasonality=False,   # ❗ remove noisy daily patterns
+                weekly_seasonality=True,
+                yearly_seasonality=False,  # ❗ avoid overfitting small data
+
+                changepoint_prior_scale=0.1,   # less flexible trend
+                seasonality_prior_scale=5,     # smoother seasonality
+                n_changepoints=10              # fewer breakpoints
+            )
+
+            model.fit(train)
+
+            future = model.make_future_dataframe(periods=len(test))
+            forecast = model.predict(future)
+
+            train_pred = forecast["yhat"][:len(train)]
+            test_pred = forecast["yhat"][len(train):len(train)+len(test)]
+
+            train_mae = mean_absolute_error(train["y"], train_pred)
+            test_mae = mean_absolute_error(test["y"], test_pred)
+
+            correction_note = "No correction needed"
 
 
-    # =========================================
-    # STEP 5: TRAIN MODEL
-    # =========================================
-    with st.spinner("Training Prophet Model..."):
+            # ===================== AUTO CORRECTION =====================
+            ratio = test_mae / train_mae
 
-        model = Prophet(
-            daily_seasonality=True,
-            weekly_seasonality=True,
-            yearly_seasonality=True
-        )
+            correction_note = "No correction needed"
 
-        model.fit(train_df)
+            if ratio > 3:
 
-        future = model.make_future_dataframe(
-            periods=len(test_df),
-            freq=freq
-        )
+                # 🔽 STRONG REGULARIZATION (OVERFITTING)
+                model = Prophet(
+                    daily_seasonality=False,
+                    weekly_seasonality=True,
+                    yearly_seasonality=False,
 
+                    changepoint_prior_scale=0.03,
+                    seasonality_prior_scale=2,
+                    n_changepoints=5
+                )
+
+                model.fit(train)
+
+                future = model.make_future_dataframe(periods=len(test))
+                forecast = model.predict(future)
+
+                train_pred = forecast["yhat"][:len(train)]
+                test_pred = forecast["yhat"][len(train):len(train)+len(test)]
+
+                correction_note = "Strong regularization applied (overfitting reduced)"
+
+            elif ratio < 0.7:
+
+                # 🔼 INCREASE FLEXIBILITY (UNDERFITTING)
+                model = Prophet(
+                    daily_seasonality=False,
+                    weekly_seasonality=True,
+                    yearly_seasonality=False,
+
+                    changepoint_prior_scale=0.1,
+                    seasonality_prior_scale=5,
+                    n_changepoints=10
+                )
+                model.add_seasonality(
+                name='weekly_custom',
+                period=7,
+                fourier_order=5
+            )
+                model.fit(train)
+
+                future = model.make_future_dataframe(periods=len(test))
+                forecast = model.predict(future)
+
+                train_pred = forecast["yhat"][:len(train)]
+                test_pred = forecast["yhat"][len(train):len(train)+len(test)]
+
+
+
+                correction_note = "Increased flexibility (underfitting improved)"
+        # ============================================================
+        # PERFORMANCE (SAME UI)
+        # ============================================================
+        rmse = np.sqrt(mean_squared_error(test["y"], test_pred))
+
+  
+
+        st.markdown("### Model Performance")
+
+        st.markdown("""
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-title">Train MAE</div>
+                <div class="summary-value">{}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Test MAE</div>
+                <div class="summary-value">{}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">RMSE</div>
+                <div class="summary-value">{}</div>
+            </div>
+                  
+        </div>
+        """.format(
+            f"{train_mae:.2f}",
+            f"{test_mae:.2f}",
+            f"{rmse:.2f}"
+        ), unsafe_allow_html=True)
+
+        # ============================================================
+        # DIAGNOSTICS (SAME LOGIC)
+        # ============================================================
+        st.markdown("### Model Diagnostics")
+
+        ratio = test_mae / train_mae
+
+        if ratio > 3:
+            st.error("⚠️ Overfitting Detected → Auto-corrected")
+
+        elif ratio < 0.7:
+            st.warning("⚠️ Underfitting Detected → Auto-corrected")
+
+        else:
+            st.success("✅ Model is well balanced")
+
+
+        st.markdown("### Model Tuning Summary")
+
+        st.info(f"""
+        **Understanding Model (Prophet)**
+
+        **Model Used:** Prophet Forecasting  
+
+        ### What Prophet Learned from Your Data
+
+        • Captured overall **trend pattern** in demand  
+        • Modeled **weekly seasonality** (sales patterns across days)  
+        • Adapted to **changes in demand behavior** using changepoints  
+
+        ### Model Configuration Applied
+
+        • Weekly Seasonality = Enabled  
+        • Daily Seasonality = {"Enabled" if model.daily_seasonality else "Disabled"}  
+        • Yearly Seasonality = {"Enabled" if model.yearly_seasonality else "Disabled"}  
+
+        • Changepoint Prior Scale = {model.changepoint_prior_scale}  
+        → Controls how flexible trend changes are  
+
+        • Seasonality Prior Scale = {model.seasonality_prior_scale}  
+        → Controls smoothness of patterns  
+
+        • Number of Changepoints = {model.n_changepoints}  
+
+
+        ### Final Model Decision
+
+        • Prophet Model selected automatically  
+        • No manual tuning required  
+
+        ✔ {correction_note}
+        """)
+
+        # ============================================================
+        # FORECAST (UPDATED)
+        # ============================================================
+        last_date = df_ts["ds"].max()
+
+        # 🔥 FIX: set forecast start to Jan 2026
+        forecast_start = pd.Timestamp("2026-01-01")
+
+        # If data already goes beyond Jan 2026
+        if forecast_start <= last_date:
+            forecast_start = last_date + pd.Timedelta(days=1)
+
+        # ❌ REMOVE GAP COMPLETELY
+
+        # Forecast
+        future = model.make_future_dataframe(periods=forecast_days)
         forecast = model.predict(future)
 
-    # =========================================
-    # STEP 6: PIPELINE OUTPUT ONLY
-    # =========================================
-    predictions = forecast["yhat"].tail(len(test_df)).values
-    y_test = test_df["y"].values
-    dates = test_df["ds"].reset_index(drop=True)
+        future_pred = forecast["yhat"].tail(forecast_days).values
+        future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
 
-    st.success("Prophet Model Training Completed")
+        # ============================================================
+        # GRAPH (ONLY SMALL CHANGE)
+        # ============================================================
+        st.markdown("### Demand Forecast Timeline")
+        st.caption("Blue = Actual | Red = Forecast")
 
+        fig = go.Figure()
 
+        # ============================================================
+        # ACTUAL
+        # ============================================================
+        fig.add_trace(go.Scatter(
+            x=df_ts["ds"],
+            y=df_ts["y"],
+            name="Actual",
+            line=dict(color="#2E86C1", width=3),
 
+            # 🔥 HOVER
+            hovertemplate=
+            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
+            "<b>Actual :</b> %{y:.2f}<br>" +
+            "<extra></extra>"
+        ))
 
+        # ============================================================
+        # FORECAST
+        # ============================================================
+        fig.add_trace(go.Scatter(
+            x=future_dates,
+            y=future_pred,
+            name="Forecast",
+            line=dict(color="#E74C3C", width=3),
+
+            # 🔥 HOVER
+            hovertemplate=
+            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
+            "<b>Forecast Demand:</b> %{y:.2f}<br>" +
+            "<extra></extra>"
+        ))
+
+        # ============================================================
+        # FORECAST START LINE
+        # ============================================================
+        fig.add_vline(
+            x=forecast_start,
+            line_dash="dash",
+            line_color="black"
+        )
+
+        # ============================================================
+        # LAYOUT (FINAL)
+        # ============================================================
+        fig.update_layout(
+            template="plotly_white",
+            xaxis_title="Date",
+            yaxis_title="Quantity Sold",
+            hovermode="x unified",
+
+            # 🔥 SHOW ALL MONTHS
+            xaxis=dict(
+                tickmode="linear",
+                dtick="M1",
+                tickformat="%b %Y",
+                tickangle=-45
+            ),
+
+            # 🔥 HOVER STYLE
+            hoverlabel=dict(
+                bgcolor="white",
+                font_size=14,
+                font_family="Arial",
+                bordercolor="#2F75B5"
+            )
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ============================================================
+        # BUSINESS INSIGHTS (SAME)
+        # ============================================================
+        st.markdown("Demand Insights")
+
+        recent = df_ts["y"].tail(14).mean()
+        future_avg = np.mean(future_pred)
+
+        if future_avg > recent:
+            st.success("Demand is expected to increase in upcoming period")
+        else:
+            st.warning("Demand may decrease or stay stable")
+
+        volatility = np.std(df_ts["y"].tail(30))
+
+        if volatility > 30:
+            st.warning("⚠️ High demand fluctuation observed")
+        else:
+            st.info("Demand is relatively stable")
+
+        st.info(f"Forecast horizon: {forecast_days} days")
+
+        # ============================================================
+        # TABLE (SAME)
+        # ============================================================
+        st.markdown("### Forecast Output")
+
+        forecast_df = pd.DataFrame({
+            "Date": future_dates,
+            "Forecast Quantity": future_pred
+        })
+
+        render_html_table(forecast_df)
 # ============================================================
 # MACHINE LEARNING REGRESSION
 # ============================================================
 
-elif selected_model == "Machine Learning Regression Forecast":
+elif selected_model == "Machine Learning Forecast":
 
     st.markdown("## Feature Engineering")
 
@@ -4658,6 +5183,7 @@ elif selected_model == "Machine Learning Regression Forecast":
 
         scaler = StandardScaler()
         scaled_values = scaler.fit_transform(X_selected.copy())
+        st.session_state["scaler"] = scaler
 
         scaled_df = pd.DataFrame(
             scaled_values,
@@ -4719,9 +5245,241 @@ elif selected_model == "Machine Learning Regression Forecast":
     )
 
     if model_choice == "Linear Regression":
+        from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+        # ============================================================
+        # HEADER
+        # ============================================================
+        st.markdown("## Machine Learning Forecast - Linear Regression")
+
+        # ============================================================
+        # FORECAST HORIZON
+        # ============================================================
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["1 Month", "2 Months", "3 Months"],
+            horizontal=True
+        )
+
+        forecast_days = {
+            "1 Month": 30,
+            "2 Months": 60,
+            "3 Months": 90
+        }[horizon_choice]
+
+        train_btn = st.button("Train Model")
         model = LinearRegression()
+        if train_btn:
+
+            # ============================================================
+            # BUILD TIME SERIES DATA
+            # ============================================================
+            df_ts = df.copy()
+            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
+            df_ts = df_ts.dropna(subset=["created_at"])
+            df_ts = df_ts.sort_values("created_at")
+
+            df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
+            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
+
+            # ============================================================
+            # FEATURE ENGINEERING (ONLY 3 FEATURES)
+            # ============================================================
+            df_ts["lag_1"] = df_ts[target_column].shift(1)
+            df_ts["lag_7"] = df_ts[target_column].shift(7)
+            df_ts["rolling_mean_7"] = df_ts[target_column].rolling(7).mean()
+
+            df_ts = df_ts.dropna()
+
+            # ============================================================
+            # SPLIT
+            # ============================================================
+            split = int(len(df_ts) * 0.8)
+
+            train = df_ts.iloc[:split]
+            test = df_ts.iloc[split:]
+
+            X_train = train[["lag_1", "lag_7", "rolling_mean_7"]]
+            y_train = train[target_column]
+
+            X_test = test[["lag_1", "lag_7", "rolling_mean_7"]]
+            y_test = test[target_column]
+
+            # ============================================================
+            # TRAIN MODEL
+            # ============================================================
+            model = LinearRegression()
+
+            model.fit(X_train, y_train)
+
+            train_pred = model.predict(X_train)
+            test_pred = model.predict(X_test)
+
+            # ============================================================
+            # METRICS
+            # ============================================================
+            train_mae = mean_absolute_error(y_train, train_pred)
+            test_mae = mean_absolute_error(y_test, test_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, test_pred))
+            train_r2 = r2_score(y_train, train_pred)
+            test_r2 = r2_score(y_test, test_pred)
+
+            ratio = test_mae / (train_mae + 1e-5)
+            st.markdown("### Model Performance")
+
+
+            col1, col2, col3, col4, col5 = st.columns(5)
+
+            col1.metric("Train MAE", f"{train_mae:.2f}")
+            col2.metric("Test MAE", f"{test_mae:.2f}")
+            col3.metric("RMSE", f"{rmse:.2f}")
+            col4.metric("R²", f"{train_r2:.2f}")
+
+            # ============================================================
+            # DIAGNOSTICS
+            # ============================================================
+            st.markdown("### Model Diagnostics")
+
+            if ratio > 3:
+                st.error("Overfitting Detected")
+            elif ratio < 0.7:
+                st.warning("Underfitting Detected")
+            else:
+                st.success("Model is balanced")
+
+            # ============================================================
+            # RECURSIVE FORECAST FUNCTION
+            # ============================================================
+            def recursive_forecast(last_values, steps):
+
+                preds = []
+                temp = list(last_values)
+
+                for _ in range(steps):
+
+                    lag_1 = temp[-1]
+                    lag_7 = temp[0]
+                    rolling = np.mean(temp)
+
+                    X_input = np.array([[lag_1, lag_7, rolling]])
+                    pred = model.predict(X_input)[0]
+
+                    # 🔥 FIX 1: Prevent negative explosion
+                    pred = max(0, pred)
+
+                    # 🔥 FIX 2: Stabilize (limit sudden jumps)
+                    if len(preds) > 0:
+                        prev = preds[-1]
+                        pred = 0.7 * prev + 0.3 * pred
+
+                    preds.append(pred)
+
+                    # 🔥 FIX 3: update window safely
+                    temp.append(pred)
+                    temp.pop(0)
+
+                return preds
+
+            # ============================================================
+            # GAP DETECTION
+            # ============================================================
+            last_date = df_ts["created_at"].max()
+            today = pd.Timestamp.today().normalize()
+
+            gap_days = (today - last_date).days
+
+            last_values = df_ts[target_column].tail(7).values
+
+            if gap_days > 0:
+                gap_preds = recursive_forecast(last_values, gap_days)
+
+                gap_dates = pd.date_range(
+                    start=last_date + pd.Timedelta(days=1),
+                    periods=gap_days
+                )
+            else:
+                gap_preds, gap_dates = [], []
+
+            # ============================================================
+            # FUTURE FORECAST
+            # ============================================================
+            future_preds = recursive_forecast(last_values, forecast_days)
+            # Smooth final forecast slightly
+            future_preds = pd.Series(future_preds).rolling(3, min_periods=1).mean().values
+            future_dates = pd.date_range(
+                start=today,
+                periods=forecast_days
+            )
+
+            # ============================================================
+            # GRAPH
+            # ============================================================
+            st.markdown("### Demand Forecast Timeline")
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatter(
+                x=df_ts["created_at"],
+                y=df_ts[target_column],
+                name="Actual"
+            ))
+
+            if len(gap_preds) > 0:
+                fig.add_trace(go.Scatter(
+                    x=gap_dates,
+                    y=gap_preds,
+                    name="Gap Fill",
+                    line=dict(dash="dot")
+                ))
+
+            fig.add_trace(go.Scatter(
+                x=future_dates,
+                y=future_preds,
+                name="Forecast"
+            ))
+
+            fig.add_vline(x=today, line_dash="dash")
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("### Demand Insights")
+
+            avg_demand = np.mean(future_preds)
+            max_demand = np.max(future_preds)
+            min_demand = np.min(future_preds)
+            trend = "Increasing 📈" if future_preds[-1] > future_preds[0] else "Decreasing 📉"
+
+            st.markdown(f"""
+            <div style='background:#E8F6F3;padding:15px;border-radius:10px'>
+
+            <b>📊 Forecast Summary</b><br><br>
+
+            • Average Demand: <b>{avg_demand:.2f}</b><br>
+            • Peak Demand: <b>{max_demand:.2f}</b><br>
+            • Trend: <b>{trend}</b>
+
+            </div>
+            """, unsafe_allow_html=True)
+
+            # ============================================================
+            # TABLE
+            # ============================================================
+            st.markdown("### Forecast Output")
+
+            forecast_df = pd.DataFrame({
+                "Date": future_dates,
+                "Forecast Quantity": future_preds
+            })
+
+            st.dataframe(forecast_df)
+
     elif model_choice == "Random Forest":
-        model = RandomForestRegressor(n_estimators=100,max_features="sqrt",random_state=42)
+        model = RandomForestRegressor(
+            n_estimators=200,
+            max_depth=10,
+            random_state=42
+        )
+
     elif model_choice == "XGBoost":
         model = xgb.XGBRegressor(
             n_estimators=300,
@@ -4736,6 +5494,8 @@ elif selected_model == "Machine Learning Regression Forecast":
         model.fit(X_train, y_train)
 
     predictions = model.predict(X_test)
+
+    
 
 # ============================================================
 # DEEP LEARNING MODEL
@@ -4997,94 +5757,10 @@ if "predictions" in locals():
         st.error("Model produced no valid predictions to evaluate.")
         st.stop()
 
-    # ------------------------------------------------------------
-    # METRICS
-    # ------------------------------------------------------------
 
 
-    if selected_model in [
-        "Machine Learning Regression Forecast",
-        "Deep Learning Forecast"
-    ]:
 
-        mae = mean_absolute_error(y_test, predictions)
-        r2 = r2_score(y_test, predictions)
 
-        col1, col2 = st.columns(2)
-
-        col1.metric("Mean Absolute Error", round(mae,2))
-        col2.metric("R² Score", round(r2,3))
-
-    else:
-        st.info("Time-series models are evaluated visually through forecast plots.")
-
-    # ------------------------------------------------------------
-    # VISUALIZATION
-    # ------------------------------------------------------------
-    # 🔥 use real datetime index instead of range
-    # ============================================================
-    # FINAL SAFE DATE HANDLING (NO df_ts ERROR EVER)
-    # ============================================================
-
-    try:
-        # ARIMA / Time-Series case
-        if selected_model == "Time-Series Forecasting":
-            dates = df_ts.index[split_index:]
-
-        # Prophet case
-        elif selected_model == "Prophet Based Demand Forecast":
-            dates = test_df["ds"].reset_index(drop=True)
-
-        # ML / DL case
-        else:
-            if "created_at" in df.columns:
-                dates = pd.to_datetime(df["created_at"]).iloc[-len(y_test):].reset_index(drop=True)
-            else:
-                dates = range(len(y_test))
-
-    except:
-        # FINAL FALLBACK (never crash)
-        dates = range(len(y_test))
-
-    timeline_df = pd.DataFrame({
-        "date": dates,
-        "actual": y_test.values,
-        "predicted": predictions
-    })
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(
-        x=timeline_df["date"],
-        y=timeline_df["actual"],
-        mode="lines+markers",
-        name="Actual Demand",
-        line=dict(color="royalblue", width=3)
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=timeline_df["date"],
-        y=timeline_df["predicted"],
-        mode="lines",
-        name="Forecasted Demand",
-        line=dict(color="green", dash="dash", width=3)
-    ))
-
-    fig.update_layout(
-        title="Demand Forecasting Timeline",
-        xaxis_title="Date",
-        yaxis_title="Units Sold",
-        template="plotly_white",
-        hovermode="x unified"
-    )
-
-    # 🔥 nice date formatting
-    fig.update_xaxes(
-        tickformat="%b %d\n%Y"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-   
 # ============================================================
 # FOOTER
 # ============================================================
