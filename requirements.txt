@@ -13,3 +13,5 @@ plotly
 streamlit-option-menu
 tensorflow
 prophet
+sqlalchemy
+pymysql

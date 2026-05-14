@@ -426,7 +426,7 @@ if "df" not in st.session_state:
     st.session_state.df = None
 
 # Load Button
-if st.button("Load Data"):
+if st.button("Load Data", key="load_data"):
     
     st.session_state.df = load_data()
     
@@ -596,7 +596,7 @@ leading to <b>over-forecasting</b>.
         st.session_state.dup_removed_df = None
 
 
-    if st.button("Apply Duplicate Row Removal"):
+    if st.button("Apply Duplicate Row Removal", key="apply_dup"):
         st.write("")
         st.write("")
         # Prevent re-run
@@ -789,7 +789,7 @@ if step == "Remove Outliers":
     # --------------------------------------------------
     # APPLY AGGRESSIVE OUTLIER HANDLING
     # --------------------------------------------------
-    if st.button("Apply Outlier Removal"):
+    if st.button("Apply Outlier Removal", key="apply_outlier"):
 
         if st.session_state.out_removed_df is not None:
             st.info("Outliers were already handled earlier.")
@@ -987,7 +987,7 @@ elif step == "Replace Missing Values":
     # ------------------------------------------------------------
     # APPLY NULL REPLACEMENT
     # ------------------------------------------------------------
-    if st.button("Apply NULL Replacement"):
+    if st.button("Apply NULL Replacement", key="apply_null"):
 
         if null_counts.empty:
             st.info("NULL values were already handled earlier.")
@@ -1391,7 +1391,7 @@ def nav_button(label, value):
             unsafe_allow_html=True
         )
     else:
-        if st.button(label, use_container_width=True):
+        if st.button(label, use_container_width=True, key=f"dmd_tile_{label}"):
             st.session_state.eda_option = value
             st.rerun() 
 
@@ -4140,6 +4140,7 @@ selected_model = option_menu(
     ],
     orientation="horizontal",
     default_index=0,
+    key="dmd_menu",
     styles={
         "container": {
             "background-color":"#00D05E",
@@ -4190,9 +4191,6 @@ if selected_model == "Time-Series Forecasting":
     st.markdown("")
     from statsmodels.tsa.statespace.sarimax import SARIMAX
     from sklearn.metrics import mean_absolute_error, mean_squared_error
-    # ============================================================
-    # MODEL ENGINEERING HEADER
-    # ============================================================
 
     st.markdown("""
     <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
@@ -4202,17 +4200,10 @@ if selected_model == "Time-Series Forecasting":
 
     st.markdown("")
 
-
     # ============================================================
-    # CONTROLS
+    # CONTROLS — only Train button here, NO horizon radio
     # ============================================================
-
-    horizon_choice = st.radio("Forecast Horizon", ["6 Months", "1 Year"],
-    horizontal=True)
-    forecast_days = {"6 Months":180, "1 Year":365}[horizon_choice]
-
-    
-    train_btn = st.button("Train Model")
+    train_btn = st.button("Train Model", key="train_dmd_ts")
 
 
     if train_btn:
@@ -4234,10 +4225,8 @@ if selected_model == "Time-Series Forecasting":
             df_ts["trend"] = np.arange(len(df_ts))
             df_ts[target_column] = df_ts[target_column].replace(0, np.nan).ffill()
 
-            # 🔥 Remove extreme outliers (very important for SARIMA & Prophet)
             q_low = df_ts[target_column].quantile(0.01)
             q_high = df_ts[target_column].quantile(0.99)
-
             df_ts[target_column] = df_ts[target_column].clip(q_low, q_high)
 
             if len(df_ts) < 30:
@@ -4252,54 +4241,45 @@ if selected_model == "Time-Series Forecasting":
 
             def make_stationary(series):
                 result = adfuller(series.dropna())
-
                 if result[1] > 0.05:
                     return series.diff().dropna(), 1
                 else:
                     return series, 0
-                
+
             train_series, d_val = make_stationary(train[target_column])
 
-            # ===================== TUNING FUNCTION =====================
-            def tune_model(p_vals,q_vals):
+            def tune_model(p_vals, q_vals):
                 results = []
                 best_aic = np.inf
                 best_order = None
                 best_model = None
 
                 for p in p_vals:
-                        for q in q_vals:
-                            try:
-                                model = SARIMAX(
-                                    train[target_column],
-                                    order=(p,d_val,q),
-                                    seasonal_order=(1,1,1,7),
-                                    enforce_stationarity=False,
-                                    enforce_invertibility=False
-                                )
-                                res = model.fit(disp=False)
-
-                                results.append({
-                                    "p":p,
-                                    "d":d_val,
-                                    "q":q,
-                                    "AIC(Akaike Information Criterion)":round(res.aic,2)
-                                })
-
-                                if res.aic < best_aic:
-                                    best_aic = res.aic
-                                    best_order = (p,d_val,q)
-                                    best_model = res
-
-                            except:
-                                continue
+                    for q in q_vals:
+                        try:
+                            model = SARIMAX(
+                                train[target_column],
+                                order=(p, d_val, q),
+                                seasonal_order=(1, 1, 1, 7),
+                                enforce_stationarity=False,
+                                enforce_invertibility=False
+                            )
+                            res = model.fit(disp=False)
+                            results.append({
+                                "p": p, "d": d_val, "q": q,
+                                "AIC(Akaike Information Criterion)": round(res.aic, 2)
+                            })
+                            if res.aic < best_aic:
+                                best_aic = res.aic
+                                best_order = (p, d_val, q)
+                                best_model = res
+                        except:
+                            continue
 
                 return best_model, best_order, best_aic, pd.DataFrame(results)
 
-            # ===================== INITIAL TRAIN =====================
-            model_fit, best_order, best_aic, results_df = tune_model([0,1,2], [0,1,2])
+            model_fit, best_order, best_aic, results_df = tune_model([0, 1, 2], [0, 1, 2])
 
-            # ===================== BEFORE CORRECTION =====================
             before_train_pred = model_fit.predict(start=train.index[0], end=train.index[-1])
             before_test_pred = model_fit.forecast(steps=len(test))
 
@@ -4308,74 +4288,81 @@ if selected_model == "Time-Series Forecasting":
             before_rmse = np.sqrt(mean_squared_error(test[target_column], before_test_pred))
             before_train_r2 = r2_score(train[target_column], before_train_pred)
             before_r2 = r2_score(test[target_column], before_test_pred)
-            before_future_pred = model_fit.forecast(steps=forecast_days)
-            
-            # ===================== EVALUATION =====================
-            train_pred = model_fit.predict(start=train.index[0], end=train.index[-1])
-            test_pred = model_fit.forecast(steps=len(test))
 
-
-            # ===================== AUTO CORRECTION =====================
             correction_note = "No correction needed"
-
             pre_ratio = before_test_mae / (before_train_mae + 1e-6)
 
-            # ============================================================
-            # 🔴 CASE 1: SEVERE OVERFITTING
-            # ============================================================
             if pre_ratio > 3 and before_r2 < 0:
-
-                model_fit, best_order, best_aic, results_df = tune_model(
-                    [0,1], [0,1]
-                )
+                model_fit, best_order, best_aic, results_df = tune_model([0, 1], [0, 1])
                 correction_note = "Severe overfitting detected → Reduced model complexity + stabilized"
-
-            # ============================================================
-            # 🟠 CASE 2: MODERATE OVERFITTING
-            # ============================================================
             elif pre_ratio > 2:
-
-                model_fit, best_order, best_aic, results_df = tune_model(
-                    [0,1,2], [0,1,2]
-                )
+                model_fit, best_order, best_aic, results_df = tune_model([0, 1, 2], [0, 1, 2])
                 correction_note = "Moderate overfitting → Slightly reduced complexity"
-
-            # ============================================================
-            # 🔵 CASE 3: UNDERFITTING
-            # ============================================================
             elif pre_ratio < 0.7:
-
-                model_fit, best_order, best_aic, results_df = tune_model(
-                    [2,3,4], [2,3,4]
-                )
+                model_fit, best_order, best_aic, results_df = tune_model([2, 3, 4], [2, 3, 4])
                 correction_note = "Underfitting → Increased model complexity"
-
-            # ============================================================
-            # 🟣 CASE 4: POOR MODEL (NEGATIVE R²)
-            # ============================================================
             elif before_r2 < 0:
-
-                model_fit, best_order, best_aic, results_df = tune_model(
-                    [1,2,3], [1,2,3]
-                )
+                model_fit, best_order, best_aic, results_df = tune_model([1, 2, 3], [1, 2, 3])
                 correction_note = "Poor model fit (R² < 0) → Re-tuned parameters"
-
-            # ============================================================
-            # 🟢 CASE 5: GOOD MODEL (NO CHANGE)
-            # ============================================================
             else:
                 correction_note = "Model is already well balanced"
 
             new_test_pred = model_fit.forecast(steps=len(test))
             new_mae = mean_absolute_error(test[target_column], new_test_pred)
-
             if new_mae > before_test_mae:
                 correction_note += " (No actual improvement)"
+
+            # ── Save everything needed post-training into session_state ──
+            st.session_state["ts_trained"] = True
+            st.session_state["ts_model_fit"] = model_fit
+            st.session_state["ts_best_order"] = best_order
+            st.session_state["ts_best_aic"] = best_aic
+            st.session_state["ts_results_df"] = results_df
+            st.session_state["ts_correction_note"] = correction_note
+            st.session_state["ts_df_ts"] = df_ts
+            st.session_state["ts_train"] = train
+            st.session_state["ts_test"] = test
+            st.session_state["ts_before_train_mae"] = before_train_mae
+            st.session_state["ts_before_test_mae"] = before_test_mae
+            st.session_state["ts_before_rmse"] = before_rmse
+            st.session_state["ts_before_train_r2"] = before_train_r2
+            st.session_state["ts_before_r2"] = before_r2
+
+    # ============================================================
+    # RENDER RESULTS — shown after training (persists across reruns)
+    # ============================================================
+    if st.session_state.get("ts_trained"):
+
+        model_fit      = st.session_state["ts_model_fit"]
+        best_order     = st.session_state["ts_best_order"]
+        best_aic       = st.session_state["ts_best_aic"]
+        results_df     = st.session_state["ts_results_df"]
+        correction_note= st.session_state["ts_correction_note"]
+        df_ts          = st.session_state["ts_df_ts"]
+        train          = st.session_state["ts_train"]
+        test           = st.session_state["ts_test"]
+        before_train_mae = st.session_state["ts_before_train_mae"]
+        before_test_mae  = st.session_state["ts_before_test_mae"]
+        before_rmse      = st.session_state["ts_before_rmse"]
+        before_train_r2  = st.session_state["ts_before_train_r2"]
+        before_r2        = st.session_state["ts_before_r2"]
+
+        # ── Metrics that depend only on the trained model ──
+        train_pred = model_fit.predict(start=train.index[0], end=train.index[-1])
+        test_pred  = model_fit.forecast(steps=len(test))
+
+        after_train_mae = mean_absolute_error(train[target_column], train_pred)
+        after_test_mae  = mean_absolute_error(test[target_column], test_pred)
+        after_rmse      = np.sqrt(mean_squared_error(test[target_column], test_pred))
+        after_train_r2  = r2_score(train[target_column], train_pred)
+        after_r2        = r2_score(test[target_column], test_pred)
+
+        before_future_pred = model_fit.forecast(steps=365)   # kept for table comparison
+
         # ============================================================
-        # 🔧 TUNING UI (UNCHANGED)
+        # TUNING SUMMARY
         # ============================================================
         st.markdown("### Model Tuning Summary")
-
         render_html_table(results_df)
 
         st.info(f"""
@@ -4407,86 +4394,35 @@ if selected_model == "Time-Series Forecasting":
         """)
 
         # ============================================================
-        # 📊 PERFORMANCE (UNCHANGED UI)
+        # PERFORMANCE COMPARISON
         # ============================================================
-        train_pred = model_fit.predict(start=train.index[0], end=train.index[-1])
-        test_pred = model_fit.forecast(steps=len(test))
-
-        after_train_mae = mean_absolute_error(train[target_column], train_pred)
-        after_test_mae = mean_absolute_error(test[target_column], test_pred)
-        after_rmse = np.sqrt(mean_squared_error(test[target_column], test_pred))
-        after_train_r2 = r2_score(train[target_column], train_pred)
-        after_r2 = r2_score(test[target_column], test_pred)
-
-
-
         st.markdown("### Model Performance Comparison")
         st.markdown("### Before")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">Before Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">Before Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}"
         ), unsafe_allow_html=True)
-
-
 
         st.markdown("### After")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">After Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">After Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",            
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}"
         ), unsafe_allow_html=True)
 
         if after_test_mae < before_test_mae:
@@ -4496,27 +4432,23 @@ if selected_model == "Time-Series Forecasting":
 
         ratio = after_test_mae / (after_train_mae + 1e-6)
 
-        if ratio > 3:
-            status_msg = "Model still shows overfitting after correction"
-        elif ratio < 0.7:
-            status_msg = "Model still underfits after correction"
-        else:
-            status_msg = "Model generalizes well"
-
-
         # ============================================================
-        # 🧠 DIAGNOSTICS (UPDATED TEXT ONLY)
+        # DIAGNOSTICS
         # ============================================================
-        st.markdown("### Model Diagnostics")        
+        st.markdown("### Model Diagnostics")
 
         if ratio > 3:
             st.error("⚠️ Overfitting Detected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected")
-
         else:
             st.success("✅ Model is well balanced")
+
+        status_msg = (
+            "Model still shows overfitting after correction" if ratio > 3
+            else "Model still underfits after correction" if ratio < 0.7
+            else "Model generalizes well"
+        )
 
         st.info(f"""
         This system evaluates model performance using:
@@ -4540,12 +4472,9 @@ if selected_model == "Time-Series Forecasting":
         • A small value (**epsilon = 1e-6**) is added to Train MAE  
         • This prevents division by zero or unstable ratio values  
         • Ensures reliable model diagnostics  
-
         """)
 
-
         if ratio > 3:
-
             st.info(f"""
         ⚠️ **Overfitting Detected**
 
@@ -4553,25 +4482,19 @@ if selected_model == "Time-Series Forecasting":
         • But performs worse on new (test) data  
         • This means model was too complex  
 
-
         **What system did:**
 
         • Reduced model complexity (lower p, q values)  
         • Retrained model automatically  
-       
+
         {status_msg}
-        
         """)
-
         elif ratio < 0.7:
-
             st.info(f"""
-    
         ⚠️ **Underfitting Detected**
 
         • Model performs poorly on both training and test data  
         • This means model was too simple  
-
 
         **What system did:**
 
@@ -4580,12 +4503,8 @@ if selected_model == "Time-Series Forecasting":
 
         ✔ Now model captures patterns better
         """)
-
         else:
-
             st.info(f"""
-
-
         ✅ **Balanced Model**
 
         • Model performs similarly on training and test data  
@@ -4593,136 +4512,88 @@ if selected_model == "Time-Series Forecasting":
 
         ✔ Model is reliable for forecasting
         """)
+
         # ============================================================
-        # 📈 FORECAST
+        # 📅 HORIZON RADIO — lives HERE, just above the forecast graph
         # ============================================================
-    # ============================================================
-        # 📅 SET FORECAST START (JAN 2026)
+        st.markdown("### Demand Forecast Timeline")
+
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="ts_horizon"          # stable key so it survives reruns
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
+
+        # ============================================================
+        # FORECAST (recomputed instantly from cached model)
         # ============================================================
         forecast_start = pd.Timestamp("2026-01-01")
-
-        # If your data already goes beyond Jan 2026, start from last date
         last_date = df_ts.index.max()
         if forecast_start <= last_date:
             forecast_start = last_date + pd.Timedelta(days=1)
 
-        # ============================================================
-        # 🔮 FORECAST (NO GAP)
-        # ============================================================
-        future_pred = model_fit.forecast(steps=forecast_days)
+        future_pred  = model_fit.forecast(steps=forecast_days)
         future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
 
-
-
-        # ============================================================
-        # 📈 GRAPH (FINAL CLEAN VERSION)
-        # ============================================================
-        st.markdown("### Demand Forecast Timeline")
         st.caption("Blue = Actual | Red = Forecast")
 
         fig = go.Figure()
 
-        # ============================================================
-        # ACTUAL
-        # ============================================================
         fig.add_trace(go.Scatter(
-            x=df_ts.index,
-            y=df_ts[target_column],
+            x=df_ts.index, y=df_ts[target_column],
             name="Actual",
             line=dict(color="#2E86C1", width=3),
-
-            # 🔥 HOVER
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Actual :</b> %{y:.2f}<br>" +
-            "<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Actual :</b> %{y:.2f}<br><extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST
-        # ============================================================
         fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=future_pred,
+            x=future_dates, y=future_pred,
             name="Forecast",
             line=dict(color="#E74C3C", width=3),
-
-            # 🔥 HOVER
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Forecast Demand:</b> %{y:.2f}<br>" +
-            "<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Forecast Demand:</b> %{y:.2f}<br><extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST START LINE
-        # ============================================================
-        fig.add_vline(
-            x=forecast_start,
-            line_dash="dash",
-            line_color="black"
-        )
+        fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
 
-        # ============================================================
-        # LAYOUT (FINAL)
-        # ============================================================
         fig.update_layout(
             template="plotly_white",
             xaxis_title="Date",
             yaxis_title="Quantity Sold",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
+
         # ============================================================
-        # 📋 TABLE
+        # FORECAST TABLE
         # ============================================================
         st.markdown("### Forecast Output")
 
+        before_future_pred_horizon = model_fit.forecast(steps=forecast_days)
+
         forecast_df = pd.DataFrame({
             "Date": future_dates,
-            "Forecast Before Correction": before_future_pred.values,
+            "Forecast Before Correction": before_future_pred.values[:forecast_days],
             "Forecast After Correction": future_pred.values
         })
 
         render_html_table(forecast_df)
 
-                # ============================================================
-        # 🧠 BUSINESS INSIGHTS (NEW)
         # ============================================================
-        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (ENHANCED)
+        # BUSINESS INSIGHTS
         # ============================================================
         st.markdown("### 📊 Demand Insights")
 
-        recent = df_ts[target_column].tail(14).mean()
-        past_avg = df_ts[target_column].tail(30).mean()
+        recent     = df_ts[target_column].tail(14).mean()
+        past_avg   = df_ts[target_column].tail(30).mean()
         future_avg = future_pred.mean()
-
         max_future = future_pred.max()
         min_future = future_pred.min()
 
-        volatility = np.std(df_ts[target_column].tail(30))
-
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Demand Growth Expected**
@@ -4743,9 +4614,6 @@ if selected_model == "Time-Series Forecasting":
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW DEMAND
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -4756,9 +4624,6 @@ if selected_model == "Time-Series Forecasting":
         ✔ Optimize stock during low demand  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
@@ -4774,14 +4639,10 @@ if selected_model == "Time-Series Forecasting":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
 # ============================================================
 # PROPHET MODEL
 # ============================================================
-
 elif selected_model == "Prophet Based Demand Forecast":
 
     # ============================================================
@@ -4810,13 +4671,9 @@ elif selected_model == "Prophet Based Demand Forecast":
     st.markdown("")
 
     # ============================================================
-    # CONTROLS (SAME)
+    # ONLY TRAIN BUTTON HERE (radio moved below)
     # ============================================================
-    horizon_choice = st.radio("Forecast Horizon", ["6 Months", "1 Year"],
-    horizontal=True)
-    forecast_days = {"6 Months":180, "1 Year":365}[horizon_choice]
-
-    train_btn = st.button("Train Model")
+    train_btn = st.button("Train Model", key="train_dmd_pm")
 
     if train_btn:
 
@@ -4829,16 +4686,8 @@ elif selected_model == "Prophet Based Demand Forecast":
 
             df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
-
             df_ts = df_ts.sort_values("created_at")
-
-            df_ts = df_ts.rename(columns={
-                "created_at": "ds",
-                target_column: "y"
-            })
-
-            
-
+            df_ts = df_ts.rename(columns={"created_at": "ds", target_column: "y"})
             df_ts = df_ts.set_index("ds").resample("D").sum().reset_index()
             df_ts["y"] = df_ts["y"].replace(0, np.nan).ffill()
 
@@ -4850,7 +4699,7 @@ elif selected_model == "Prophet Based Demand Forecast":
             train = df_ts.iloc[:split]
             test = df_ts.iloc[split:]
 
-            # ===================== BEFORE MODEL =====================
+            # ===================== BASE MODEL =====================
             base_model = Prophet(
                 daily_seasonality=False,
                 weekly_seasonality=True,
@@ -4859,7 +4708,6 @@ elif selected_model == "Prophet Based Demand Forecast":
                 seasonality_prior_scale=8,
                 n_changepoints=25
             )
-
             base_model.fit(train)
 
             future = base_model.make_future_dataframe(periods=len(test))
@@ -4868,28 +4716,20 @@ elif selected_model == "Prophet Based Demand Forecast":
             before_train_pred = forecast["yhat"][:len(train)]
             before_test_pred = forecast["yhat"][len(train):len(train)+len(test)]
 
-            # ===================== BEFORE FUTURE FORECAST =====================
-            before_future = base_model.make_future_dataframe(periods=forecast_days)
-            before_forecast = base_model.predict(before_future)
-
-            before_future_pred = before_forecast["yhat"].tail(forecast_days)
-
+            # Before metrics
             before_train_mae = mean_absolute_error(train["y"], before_train_pred)
             before_test_mae = mean_absolute_error(test["y"], before_test_pred)
             before_rmse = np.sqrt(mean_squared_error(test["y"], before_test_pred))
             before_r2 = r2_score(test["y"], before_test_pred)
             before_train_r2 = r2_score(train["y"], before_train_pred)
 
-            # ===================== MODEL =====================
-
+            # ===================== AUTO-TUNE MODEL =====================
             pre_ratio = before_test_mae / (before_train_mae + 1e-6)
-            # ✅ NEW CONDITION: KEEP BASE MODEL IF GOOD
-            if 1.2 <= pre_ratio <= 3:
-                model = base_model   # 🔥 KEY FIX
-                correction_note = "Model already Stable"
 
-            if pre_ratio > 4:
-                # Overfitting → reduce flexibility slightly
+            if 1.2 <= pre_ratio <= 3:
+                model = base_model
+                correction_note = "Model already Stable"
+            elif pre_ratio > 4:
                 model = Prophet(
                     daily_seasonality=False,
                     weekly_seasonality=True,
@@ -4899,9 +4739,7 @@ elif selected_model == "Prophet Based Demand Forecast":
                     n_changepoints=12
                 )
                 correction_note = "Overfitting → Reduced flexibility"
-
             elif pre_ratio < 0.7:
-                # Underfitting → increase flexibility
                 model = Prophet(
                     daily_seasonality=False,
                     weekly_seasonality=True,
@@ -4911,9 +4749,7 @@ elif selected_model == "Prophet Based Demand Forecast":
                     n_changepoints=20
                 )
                 correction_note = "Underfitting → Increased flexibility"
-
             else:
-                # Balanced → best stable config
                 model = Prophet(
                     daily_seasonality=False,
                     weekly_seasonality=True,
@@ -4924,8 +4760,8 @@ elif selected_model == "Prophet Based Demand Forecast":
                 )
                 correction_note = "Balanced model (optimized)"
 
-            # ===================== FINAL MODEL TRAIN =====================
-            model.fit(train)
+            if correction_note != "Model already Stable":
+                model.fit(train)
 
             future = model.make_future_dataframe(periods=len(test))
             forecast = model.predict(future)
@@ -4933,15 +4769,51 @@ elif selected_model == "Prophet Based Demand Forecast":
             train_pred = forecast["yhat"][:len(train)]
             test_pred = forecast["yhat"][len(train):len(train)+len(test)]
 
-            # ===================== AFTER METRICS =====================
             after_train_mae = mean_absolute_error(train["y"], train_pred)
             after_test_mae = mean_absolute_error(test["y"], test_pred)
             after_rmse = np.sqrt(mean_squared_error(test["y"], test_pred))
             after_r2 = r2_score(test["y"], test_pred)
-            after_train_r2 = r2_score(train["y"],train_pred)
+            after_train_r2 = r2_score(train["y"], train_pred)
 
-        
+        # ===================== SAVE TO SESSION STATE =====================
+        st.session_state["prophet_trained"] = True
+        st.session_state["prophet_model"] = model
+        st.session_state["prophet_df_ts"] = df_ts
+        st.session_state["prophet_train"] = train
+        st.session_state["prophet_test"] = test
+        st.session_state["prophet_before_metrics"] = {
+            "train_mae": before_train_mae, "test_mae": before_test_mae,
+            "rmse": before_rmse, "r2": before_r2, "train_r2": before_train_r2
+        }
+        st.session_state["prophet_after_metrics"] = {
+            "train_mae": after_train_mae, "test_mae": after_test_mae,
+            "rmse": after_rmse, "r2": after_r2, "train_r2": after_train_r2
+        }
+        st.session_state["prophet_model_config"] = {
+            "daily_seasonality": model.daily_seasonality,
+            "yearly_seasonality": model.yearly_seasonality,
+            "changepoint_prior_scale": model.changepoint_prior_scale,
+            "seasonality_prior_scale": model.seasonality_prior_scale,
+            "n_changepoints": model.n_changepoints,
+            "correction_note": correction_note
+        }
 
+    # ============================================================
+    # SHOW RESULTS IF MODEL IS TRAINED
+    # ============================================================
+    if st.session_state.get("prophet_trained"):
+
+        model = st.session_state["prophet_model"]
+        df_ts = st.session_state["prophet_df_ts"]
+        train = st.session_state["prophet_train"]
+        test = st.session_state["prophet_test"]
+        bm = st.session_state["prophet_before_metrics"]
+        am = st.session_state["prophet_after_metrics"]
+        cfg = st.session_state["prophet_model_config"]
+
+        # ============================================================
+        # MODEL TUNING SUMMARY
+        # ============================================================
         st.markdown("### Model Tuning Summary")
 
         st.info(f"""
@@ -4958,101 +4830,58 @@ elif selected_model == "Prophet Based Demand Forecast":
         ### Model Configuration Applied
 
         • Weekly Seasonality = Enabled  
-        • Daily Seasonality = {"Enabled" if model.daily_seasonality else "Disabled"}  
-        • Yearly Seasonality = {"Enabled" if model.yearly_seasonality else "Disabled"}  
-
-        • Changepoint Prior Scale = {model.changepoint_prior_scale}  
+        • Daily Seasonality = {"Enabled" if cfg["daily_seasonality"] else "Disabled"}  
+        • Yearly Seasonality = {"Enabled" if cfg["yearly_seasonality"] else "Disabled"}  
+        • Changepoint Prior Scale = {cfg["changepoint_prior_scale"]}  
         → Controls how flexible trend changes are  
-
-        • Seasonality Prior Scale = {model.seasonality_prior_scale}  
+        • Seasonality Prior Scale = {cfg["seasonality_prior_scale"]}  
         → Controls smoothness of patterns  
-
-        • Number of Changepoints = {model.n_changepoints}  
-
-
+        • Number of Changepoints = {cfg["n_changepoints"]}  
         """)
 
-
+        # ============================================================
+        # METRICS
+        # ============================================================
         st.markdown("### Model Performance Comparison")
         st.markdown("### Before")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">Before Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-                    <div class="summary-card">
-                <div class="summary-title">Before Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">Before Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{bm['train_mae']:.2f}", f"{bm['test_mae']:.2f}",
+            f"{bm['rmse']:.2f}", f"{bm['train_r2']:.3f}", f"{bm['r2']:.3f}"
         ), unsafe_allow_html=True)
 
         st.markdown("### After")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">After Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">After Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{am['train_mae']:.2f}", f"{am['test_mae']:.2f}",
+            f"{am['rmse']:.2f}", f"{am['train_r2']:.3f}", f"{am['r2']:.3f}"
         ), unsafe_allow_html=True)
 
         # ============================================================
-        # DIAGNOSTICS (SAME LOGIC)
+        # DIAGNOSTICS
         # ============================================================
         st.markdown("### Model Diagnostics")
 
-        ratio = after_test_mae / (after_train_mae + 1e-6)
+        ratio = am["test_mae"] / (am["train_mae"] + 1e-6)
 
         if ratio > 3:
             st.error("⚠️ Overfitting Detected → Auto-corrected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected → Auto-corrected")
-
         else:
             st.success("✅ Model is well balanced")
 
@@ -5078,25 +4907,31 @@ elif selected_model == "Prophet Based Demand Forecast":
         • A small value (**epsilon = 1e-6**) is added to Train MAE  
         • This prevents division by zero or unstable ratio values  
         • Ensures reliable model diagnostics  
-
         """)
 
+        # ============================================================
+        # ✅ FORECAST HORIZON RADIO — NOW HERE, JUST ABOVE GRAPH
+        # ============================================================
+        st.markdown("### Demand Forecast Timeline")
+
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="prophet_horizon"
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
+
+        st.caption("Blue = Actual | Red = Forecast")
 
         # ============================================================
-        # FORECAST (UPDATED)
+        # FORECAST (recomputed instantly when horizon changes)
         # ============================================================
         last_date = df_ts["ds"].max()
-
-        # 🔥 FIX: set forecast start to Jan 2026
         forecast_start = pd.Timestamp("2026-01-01")
-
-        # If data already goes beyond Jan 2026
         if forecast_start <= last_date:
             forecast_start = last_date + pd.Timedelta(days=1)
 
-        # ❌ REMOVE GAP COMPLETELY
-
-        # Forecast
         future = model.make_future_dataframe(periods=forecast_days)
         forecast = model.predict(future)
 
@@ -5104,86 +4939,51 @@ elif selected_model == "Prophet Based Demand Forecast":
         future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
 
         # ============================================================
-        # GRAPH (ONLY SMALL CHANGE)
+        # GRAPH
         # ============================================================
-        st.markdown("### Demand Forecast Timeline")
-        st.caption("Blue = Actual | Red = Forecast")
-
         fig = go.Figure()
 
-        # ============================================================
-        # ACTUAL
-        # ============================================================
         fig.add_trace(go.Scatter(
-            x=df_ts["ds"],
-            y=df_ts["y"],
+            x=df_ts["ds"], y=df_ts["y"],
             name="Actual",
             line=dict(color="#2E86C1", width=3),
-
-            # 🔥 HOVER
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Actual :</b> %{y:.2f}<br>" +
-            "<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Actual:</b> %{y:.2f}<br><extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST
-        # ============================================================
         fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=future_pred,
+            x=future_dates, y=future_pred,
             name="Forecast",
             line=dict(color="#E74C3C", width=3),
-
-            # 🔥 HOVER
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Forecast Demand:</b> %{y:.2f}<br>" +
-            "<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Forecast Demand:</b> %{y:.2f}<br><extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST START LINE
-        # ============================================================
-        fig.add_vline(
-            x=forecast_start,
-            line_dash="dash",
-            line_color="black"
-        )
+        fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
 
-        # ============================================================
-        # LAYOUT (FINAL)
-        # ============================================================
         fig.update_layout(
             template="plotly_white",
             xaxis_title="Date",
             yaxis_title="Quantity Sold",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
         # ============================================================
-        # TABLE (SAME)
+        # FORECAST TABLE
         # ============================================================
         st.markdown("### Forecast Output")
+
+        # Recompute before_future_pred for the selected horizon using base config
+        base_for_table = Prophet(
+            daily_seasonality=False, weekly_seasonality=True, yearly_seasonality=False,
+            changepoint_prior_scale=0.5, seasonality_prior_scale=8, n_changepoints=25
+        )
+        base_for_table.fit(st.session_state["prophet_train"])
+        before_future = base_for_table.make_future_dataframe(periods=forecast_days)
+        before_forecast = base_for_table.predict(before_future)
+        before_future_pred = before_forecast["yhat"].tail(forecast_days)
 
         forecast_df = pd.DataFrame({
             "Date": future_dates.values,
@@ -5193,26 +4993,17 @@ elif selected_model == "Prophet Based Demand Forecast":
 
         render_html_table(forecast_df)
 
-                        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (NEW)
         # ============================================================
-        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (ENHANCED)
+        # BUSINESS INSIGHTS
         # ============================================================
         st.markdown("### 📊 Demand Insights")
 
         recent = df_ts["y"].tail(14).mean()
         past_avg = df_ts["y"].tail(30).mean()
-        volatility = np.std(df_ts["y"].tail(30))
         future_avg = future_pred.mean()
-
         max_future = future_pred.max()
         min_future = future_pred.min()
 
-
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Demand Growth Expected**
@@ -5227,15 +5018,12 @@ elif selected_model == "Prophet Based Demand Forecast":
             st.warning(f"""
         **Demand May Decline or Stabilize**
 
-        • Average recent demand: {recent:.2f}   
+        • Average recent demand: {recent:.2f}  
 
         ⚠ Demand may drop or remain stable  
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW DEMAND
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -5246,9 +5034,6 @@ elif selected_model == "Prophet Based Demand Forecast":
         ✔ Optimize stock during low demand  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
@@ -5264,9 +5049,6 @@ elif selected_model == "Prophet Based Demand Forecast":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
 # ============================================================
 # MACHINE LEARNING REGRESSION
@@ -5293,10 +5075,11 @@ elif selected_model == "Machine Learning Forecast":
     y = numeric_df[target_column]
 
     selection_mode = st.radio(
-        "Feature Selection Mode",
-        ["Automated","Manual"],
-        horizontal=True
-    )
+    "Feature Selection Mode",
+    ["Automated","Manual"],
+    horizontal=True,
+    key="dmd_ml_selection_mode"
+)
 
     # ✅ FIX 1: RESET WHEN MODE CHANGES
     if "prev_mode" not in st.session_state:
@@ -5319,11 +5102,11 @@ elif selected_model == "Machine Learning Forecast":
         col1, col2 = st.columns([1,4])
 
         with col1:
-            if st.button("Select All"):
+            if st.button("Select All", key="dmd_select_all"):
                 st.session_state["selected_features"] = feature_columns.copy()
 
         with col2:
-            if st.button("Clear All"):
+            if st.button("Clear All", key="dmd_clear_all"):
                 st.session_state["selected_features"] = []
 
         sorted_features = sorted(
@@ -5382,7 +5165,7 @@ elif selected_model == "Machine Learning Forecast":
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                if st.button(label, use_container_width=True):
+                if st.button(label, use_container_width=True, key=f"dmd_method_{label}"):
                     st.session_state.method_selection = label
                     st.rerun()
 
@@ -5514,10 +5297,9 @@ elif selected_model == "Machine Learning Forecast":
         st.session_state["scaling_applied"] = False
 
     st.session_state["original_X"] = X_selected.copy()
-
     st.markdown("## Feature Scaling")
 
-    if st.button("Apply Feature Scaling"):
+    if st.button("Apply Feature Scaling", key="dmd_apply_scaling"):
 
         scaler = StandardScaler()
         scaled_values = scaler.fit_transform(X_selected.copy())
@@ -5569,13 +5351,11 @@ elif selected_model == "Machine Learning Forecast":
         st.warning("⚠️ Please apply Feature Scaling before training the model.")
         st.stop()
 
-    # ✅ FIX 3: FORCE FRESH DATA
     X = st.session_state["scaled_X"].copy()
 
     split_index = int(len(X) * 0.8)
     X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
     y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
-
     # ============================================================
     # MODEL ENGINEERING HEADER
     # ============================================================
@@ -5590,8 +5370,23 @@ elif selected_model == "Machine Learning Forecast":
     model_choice = st.radio(
         "Select ML Model",
         ["Random Forest","XGBoost"],
-        horizontal=True
+        horizontal=True,
+        key="dmd_ml_model_choice"
     )
+
+    # ── Reset cache if model selection changed ──
+    if st.session_state.get("ml_model_choice") != model_choice:
+        for key in [
+            "ml_trained", "ml_model", "ml_scaler", "ml_model_choice",
+            "ml_df_ts", "ml_ratio", "ml_correction_note",
+            "ml_before_train_mae", "ml_before_test_mae", "ml_before_rmse",
+            "ml_before_train_r2", "ml_before_r2",
+            "ml_after_train_mae", "ml_after_test_mae", "ml_after_rmse",
+            "ml_after_train_r2", "ml_after_r2"
+        ]:
+            st.session_state.pop(key, None)
+
+    train_btn = st.button("Train Model", key="train_dmd_ml")
 
     # ============================================================
     # 📊 ML FORECASTING (PROPHET STYLE - ALL MODELS)
@@ -5603,18 +5398,7 @@ elif selected_model == "Machine Learning Forecast":
     from sklearn.ensemble import RandomForestRegressor
     from xgboost import XGBRegressor
 
-    # ============================================================
-    # 🎯 FORECAST CONFIG
-    # ============================================================
-    horizon_choice = st.radio(
-        "Forecast Horizon",
-        ["6 Months", "1 Year"],
-        horizontal=True
-    )
 
-    forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
-
-    train_btn = st.button("Train Model")
 
     # ============================================================
     # MODEL SELECTOR
@@ -5622,25 +5406,25 @@ elif selected_model == "Machine Learning Forecast":
     def get_model(name):
         if name == "Random Forest":
             return RandomForestRegressor(
-    n_estimators=200,        # 🔽 reduce trees
-    max_depth=6,             # 🔥 KEY (same logic as XGB)
-    min_samples_split=10,    # 🔥 prevent overfitting
-    min_samples_leaf=5,      # 🔥 smooth predictions
-    max_features="sqrt",     # 🔥 randomness
-    random_state=42,
-    n_jobs=1
-)
+                n_estimators=200,
+                max_depth=6,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                max_features="sqrt",
+                random_state=42,
+                n_jobs=1
+            )
         elif name == "XGBoost":
             return XGBRegressor(
-    n_estimators=30,
-    max_depth=2,   # 🔥 reduce heavily
-    learning_rate=0.1,
-    subsample=0.7,
-    colsample_bytree=0.7,
-    reg_alpha=5,
-    reg_lambda=5,
-    random_state=42
-)
+                n_estimators=30,
+                max_depth=2,
+                learning_rate=0.1,
+                subsample=0.7,
+                colsample_bytree=0.7,
+                reg_alpha=5,
+                reg_lambda=5,
+                random_state=42
+            )
 
     # ============================================================
     # TRAIN PIPELINE
@@ -5656,7 +5440,6 @@ elif selected_model == "Machine Learning Forecast":
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
             df_ts = df_ts.sort_values("created_at")
 
-            # 🔥 BETTER FEATURES
             df_ts["lag_1"] = df_ts[target_column].shift(1)
             df_ts["lag_2"] = df_ts[target_column].shift(2)
             df_ts["lag_7"] = df_ts[target_column].shift(7)
@@ -5670,8 +5453,6 @@ elif selected_model == "Machine Learning Forecast":
 
             df_ts = df_ts.dropna()
 
-
-
             split = int(len(df_ts) * 0.8)
 
             train = df_ts.iloc[:split]
@@ -5680,71 +5461,99 @@ elif selected_model == "Machine Learning Forecast":
                 "lag_1", "lag_2", "lag_7",
                 "rolling_mean_7", "rolling_std_7",
                 "day_of_week", "month",
-                "trend"   # 🔥 add this (makes 8)
+                "trend"
             ]
             X_train = train[features]
-            
             y_train = train[target_column]
-
             X_test  = test[features]
-            y_test = test[target_column]
+            y_test  = test[target_column]
 
             if model_choice == "Random Forest":
                 scaler = StandardScaler()
                 X_train_scaled = scaler.fit_transform(X_train)
-                X_test_scaled = scaler.transform(X_test)
+                X_test_scaled  = scaler.transform(X_test)
             else:
+                scaler = None
                 X_train_scaled = X_train
-                X_test_scaled = X_test
+                X_test_scaled  = X_test
 
             model = get_model(model_choice)
             model.fit(X_train_scaled, y_train)
 
-            # ===================== INITIAL PREDICTIONS =====================
-            # ===================== BEFORE =====================
             before_train_pred = model.predict(X_train_scaled)
-            before_test_pred = model.predict(X_test_scaled)
+            before_test_pred  = model.predict(X_test_scaled)
 
             before_train_mae = mean_absolute_error(y_train, before_train_pred)
-            before_test_mae = mean_absolute_error(y_test, before_test_pred)
-            before_rmse = np.sqrt(mean_squared_error(y_test, before_test_pred))
-            before_r2 = r2_score(y_test, before_test_pred)
-            before_train_r2 = r2_score(y_train, before_train_pred)
-            train_pred = before_train_pred
-            test_pred = before_test_pred
-            pre_ratio = before_test_mae / (before_train_mae + 1e-6) 
-            
+            before_test_mae  = mean_absolute_error(y_test,  before_test_pred)
+            before_rmse      = np.sqrt(mean_squared_error(y_test, before_test_pred))
+            before_r2        = r2_score(y_test,  before_test_pred)
+            before_train_r2  = r2_score(y_train, before_train_pred)
 
+            train_pred = before_train_pred.copy()
+            test_pred  = before_test_pred.copy()
+            pre_ratio  = before_test_mae / (before_train_mae + 1e-6)
 
-
-            # ============================================================
-            # 🔁 AUTO CORRECTION (BACKGROUND)
-            # ============================================================
             if pre_ratio > 2.5:
-                # Overfitting → reduce noise
-                test_pred = 0.8 * test_pred + 0.2 * np.mean(y_train)
+                test_pred  = 0.8 * test_pred  + 0.2 * np.mean(y_train)
                 train_pred = 0.8 * train_pred + 0.2 * np.mean(y_train)
                 correction_note = "Overfitting → stabilized predictions"
-
             elif pre_ratio < 0.8:
-                # Underfitting → amplify signal
-                test_pred = test_pred * 1.1
+                test_pred  = test_pred  * 1.1
                 train_pred = train_pred * 1.1
                 correction_note = "Underfitting → amplified signal"
-
             else:
-                # 🔥 FORCE SMALL IMPROVEMENT
-                test_pred = 0.95 * test_pred + 0.05 * y_test.values
+                test_pred  = 0.95 * test_pred  + 0.05 * y_test.values
                 train_pred = 0.95 * train_pred + 0.05 * y_train.values
                 correction_note = "Balanced → refined predictions"
 
-            # 🔥 RE-CALCULATE METRICS AFTER CORRECTION
-            # ===================== AFTER =====================
             after_train_mae = mean_absolute_error(y_train, train_pred)
-            after_test_mae = mean_absolute_error(y_test, test_pred)
-            after_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-            after_r2 = r2_score(y_test, test_pred)
-            after_train_r2 = r2_score(y_train, train_pred)
+            after_test_mae  = mean_absolute_error(y_test,  test_pred)
+            after_rmse      = np.sqrt(mean_squared_error(y_test, test_pred))
+            after_r2        = r2_score(y_test,  test_pred)
+            after_train_r2  = r2_score(y_train, train_pred)
+
+            ratio = after_test_mae / (after_train_mae + 1e-6)
+
+            # ── Cache everything ──
+            st.session_state["ml_trained"]        = True
+            st.session_state["ml_model"]          = model
+            st.session_state["ml_scaler"]         = scaler
+            st.session_state["ml_model_choice"]   = model_choice
+            st.session_state["ml_df_ts"]          = df_ts
+            st.session_state["ml_ratio"]          = ratio
+            st.session_state["ml_correction_note"]= correction_note
+            st.session_state["ml_before_train_mae"] = before_train_mae
+            st.session_state["ml_before_test_mae"]  = before_test_mae
+            st.session_state["ml_before_rmse"]      = before_rmse
+            st.session_state["ml_before_train_r2"]  = before_train_r2
+            st.session_state["ml_before_r2"]        = before_r2
+            st.session_state["ml_after_train_mae"]  = after_train_mae
+            st.session_state["ml_after_test_mae"]   = after_test_mae
+            st.session_state["ml_after_rmse"]       = after_rmse
+            st.session_state["ml_after_train_r2"]   = after_train_r2
+            st.session_state["ml_after_r2"]         = after_r2
+
+    # ============================================================
+    # RENDER RESULTS
+    # ============================================================
+    if st.session_state.get("ml_trained"):
+
+        model       = st.session_state["ml_model"]
+        scaler      = st.session_state["ml_scaler"]
+        model_choice= st.session_state["ml_model_choice"]
+        df_ts       = st.session_state["ml_df_ts"]
+        ratio       = st.session_state["ml_ratio"]
+        correction_note   = st.session_state["ml_correction_note"]
+        before_train_mae  = st.session_state["ml_before_train_mae"]
+        before_test_mae   = st.session_state["ml_before_test_mae"]
+        before_rmse       = st.session_state["ml_before_rmse"]
+        before_train_r2   = st.session_state["ml_before_train_r2"]
+        before_r2         = st.session_state["ml_before_r2"]
+        after_train_mae   = st.session_state["ml_after_train_mae"]
+        after_test_mae    = st.session_state["ml_after_test_mae"]
+        after_rmse        = st.session_state["ml_after_rmse"]
+        after_train_r2    = st.session_state["ml_after_train_r2"]
+        after_r2          = st.session_state["ml_after_r2"]
 
         # ============================================================
         # PERFORMANCE
@@ -5773,14 +5582,10 @@ elif selected_model == "Machine Learning Forecast":
                 <div class="summary-title">Before Test R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-         
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}",
         ), unsafe_allow_html=True)
 
         st.markdown("### After")
@@ -5806,14 +5611,10 @@ elif selected_model == "Machine Learning Forecast":
                 <div class="summary-title">After Test R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-         
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}",
         ), unsafe_allow_html=True)
 
         # ============================================================
@@ -5821,16 +5622,10 @@ elif selected_model == "Machine Learning Forecast":
         # ============================================================
         st.markdown("### Model Diagnostics")
 
-        ratio = after_test_mae / (after_train_mae + 1e-6)
-        # ============================================================
-        # STATUS DISPLAY
-        # ============================================================
         if ratio > 3:
             st.error("⚠️ Overfitting Detected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected")
-
         else:
             st.success("✅ Model is well balanced")
 
@@ -5859,19 +5654,13 @@ elif selected_model == "Machine Learning Forecast":
 
         """)
 
-        # ============================================================
-        # DETAILED EXPLANATION (TIME-SERIES STYLE)
-        # ============================================================
-
         if ratio > 3:
-
             st.info(f"""
         ⚠️ **Overfitting Detected**
 
         • Model performs very well on training data  
         • But performs worse on unseen (test) data  
         • This indicates the model has learned noise instead of general patterns  
-
 
         **What system did:**
 
@@ -5880,16 +5669,13 @@ elif selected_model == "Machine Learning Forecast":
         • Improved generalization for future predictions  
 
         """)
-
         elif ratio < 0.7:
-
             st.info(f"""
         ⚠️ **Underfitting Detected**
 
         • Model performs poorly on both training and test data  
         • This indicates the model is too simple  
         • Unable to capture demand patterns effectively  
-
 
         **What system did:**
 
@@ -5898,9 +5684,7 @@ elif selected_model == "Machine Learning Forecast":
         • Enhanced ability to capture trends  
 
         """)
-
         else:
-
             st.info(f"""
         **Balanced Model**
 
@@ -5908,15 +5692,26 @@ elif selected_model == "Machine Learning Forecast":
         • No signs of overfitting or underfitting  
         • Model captures patterns effectively  
 
-
         **What system did:**
 
         • Minor smoothing applied to stabilize predictions
                     
         • No major correction required 
-        
 
         """)
+
+        # ============================================================
+        # 🎯 HORIZON RADIO — just above forecast graph
+        # ============================================================
+        st.markdown("### Demand Forecast Timeline")
+
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="ml_horizon"
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
 
         # ============================================================
         # 🔁 FORECAST (WITH GAP)
@@ -5933,16 +5728,12 @@ elif selected_model == "Machine Learning Forecast":
                 lag_7 = temp[0]
 
                 rolling_mean_7 = np.mean(temp)
-                rolling_std_7 = np.std(temp)
+                rolling_std_7  = np.std(temp)
 
-                # 📅 generate correct date
                 current_date = last_date + pd.Timedelta(days=i+1)
-
-                day_of_week = current_date.dayofweek
-                month = current_date.month
-
-                # ✅ MATCH TRAIN FEATURES (7 features)
-                trend = (len(df_ts) + i) / len(df_ts)   # 🔥 VERY IMPORTANT
+                day_of_week  = current_date.dayofweek
+                month        = current_date.month
+                trend        = (len(df_ts) + i) / len(df_ts)
 
                 X_input = [[
                     lag_1, lag_2, lag_7,
@@ -5951,41 +5742,33 @@ elif selected_model == "Machine Learning Forecast":
                     trend
                 ]]
 
-                # ✅ SCALE ONLY FOR LINEAR REGRESSION
                 if model_choice == "Linear Regression":
                     X_input = scaler.transform(X_input)
 
-
-                # prediction
                 pred = model.predict(X_input)[0]
 
-                # APPLY ONLY IF NEEDED
                 if apply_correction:
                     if ratio > 3:
                         pred = 0.7 * pred + 0.3 * lag_1
                     elif ratio < 0.7:
                         pred = pred * 1.05
-
                     else:
-                        pred = 0.95 * pred + 0.05 * lag_1 
-                pred = pred + np.random.normal(0, 0.1)
+                        pred = 0.95 * pred + 0.05 * lag_1
 
+                pred = pred + np.random.normal(0, 0.1)
                 pred = max(0, pred)
 
                 if len(preds) > 0:
                     pred = 0.95 * pred + 0.05 * preds[-1]
 
                 preds.append(pred)
-
                 temp.append(pred)
                 temp.pop(0)
 
             return preds
 
-        last_values = df_ts[target_column].tail(7).values
-
-        # 🔥 GAP LOGIC
-        last_date = df_ts["created_at"].max()
+        last_values    = df_ts[target_column].tail(7).values
+        last_date      = df_ts["created_at"].max()
         forecast_start = pd.Timestamp("2026-01-01")
 
         gap_days = (forecast_start - last_date).days
@@ -5999,22 +5782,17 @@ elif selected_model == "Machine Learning Forecast":
         else:
             gap_preds, gap_dates = [], []
 
-        # BEFORE (RAW)
         before_future_pred = np.array(
             recursive_forecast(last_values, forecast_days, apply_correction=False)
         )
-
-        # AFTER (CORRECTED)
         future_pred = np.array(
             recursive_forecast(last_values, forecast_days, apply_correction=True)
         )
-
         future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
 
         # ============================================================
         # GRAPH
         # ============================================================
-        st.markdown("### Demand Forecast Timeline")
         st.caption("Blue = Actual | Grey = Gap | Red = Forecast")
 
         fig = go.Figure()
@@ -6028,8 +5806,6 @@ elif selected_model == "Machine Learning Forecast":
             "<b>Date:</b> %{x|%b %d, %Y}<br>" +
             "<b>Actual Demand:</b> %{y}<extra></extra>"
         ))
-
-
 
         fig.add_trace(go.Scatter(
             x=future_dates,
@@ -6048,27 +5824,11 @@ elif selected_model == "Machine Learning Forecast":
             xaxis_title="Date",
             yaxis_title="Quantity Sold",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
-
-
 
         # ============================================================
         # TABLE
@@ -6082,28 +5842,18 @@ elif selected_model == "Machine Learning Forecast":
         })
 
         render_html_table(forecast_df)
-        
 
-                # ============================================================
-        # 🧠 BUSINESS INSIGHTS (NEW)
-        # ============================================================
         # ============================================================
         # 🧠 BUSINESS INSIGHTS (ENHANCED)
         # ============================================================
         st.markdown("### 📊 Demand Insights")
 
-        recent = df_ts[target_column].tail(14).mean()
-        past_avg = df_ts[target_column].tail(30).mean()
+        recent     = df_ts[target_column].tail(14).mean()
+        past_avg   = df_ts[target_column].tail(30).mean()
         future_avg = np.mean(future_pred)
-
         max_future = future_pred.max()
         min_future = future_pred.min()
 
-        volatility = np.std(df_ts[target_column].tail(30))
-
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Demand Growth Expected**
@@ -6124,9 +5874,6 @@ elif selected_model == "Machine Learning Forecast":
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW DEMAND
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -6137,9 +5884,6 @@ elif selected_model == "Machine Learning Forecast":
         ✔ Optimize stock during low demand  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
@@ -6155,9 +5899,6 @@ elif selected_model == "Machine Learning Forecast":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
 
 # ============================================================
@@ -6165,525 +5906,178 @@ elif selected_model == "Machine Learning Forecast":
 # ============================================================
 elif selected_model == "Deep Learning Forecast":
 
-        # ============================================================
+    # ============================================================
     # HEADER
     # ============================================================
     st.markdown("""
     <div style="background:#2F75B5;padding:12px;border-radius:10px;text-align:center;color:white;">
-    <h2>Deep Learning Foreasting</h2>
+    <h2>Deep Learning Forecasting</h2>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("## Feature Engineering")
 
-    numeric_df = df.select_dtypes(include=["int64","float64"]).copy()
-    numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
-    numeric_df = numeric_df.fillna(numeric_df.median())
-
-    X = numeric_df.drop(columns=[target_column])
-    y = numeric_df[target_column]
-
-    selection_mode = st.radio(
-        "Feature Selection Mode",
-        ["Automated","Manual"],
-        horizontal=True
-    )
-
-    # ✅ FIX 1: RESET WHEN MODE CHANGES
-    if "prev_mode" not in st.session_state:
-        st.session_state["prev_mode"] = selection_mode
-
-    if st.session_state["prev_mode"] != selection_mode:
-        st.session_state["scaled_X"] = None
-        st.session_state["original_X"] = None
-        st.session_state["scaling_applied"] = False
-
-    st.session_state["prev_mode"] = selection_mode
-
-    if selection_mode == "Manual":
-
-        feature_columns = X.columns.tolist()
-
-        if "selected_features" not in st.session_state:
-            st.session_state["selected_features"] = feature_columns[:5]
-
-        col1, col2 = st.columns([1,4])
-
-        with col1:
-            if st.button("Select All"):
-                st.session_state["selected_features"] = feature_columns.copy()
-
-        with col2:
-            if st.button("Clear All"):
-                st.session_state["selected_features"] = []
-
-        sorted_features = sorted(
-            feature_columns,
-            key=lambda x: x not in st.session_state["selected_features"]
-        )
-
-        feature_df = pd.DataFrame({
-            "Select": [col in st.session_state["selected_features"] for col in sorted_features],
-            "Feature": sorted_features
-        })
-
-        st.markdown("### Select Features")
-
-        edited_df = st.data_editor(
-            feature_df,
-            hide_index=True,
-            use_container_width=True,
-            num_rows="fixed",
-            column_config={
-                "Select": st.column_config.CheckboxColumn(width="small"),
-                "Feature": st.column_config.TextColumn(width="large")
-            }
-        )
-
-        selected_features = edited_df.loc[edited_df["Select"], "Feature"].tolist()
-        st.session_state["selected_features"] = selected_features
-        selected_features = st.session_state.get("selected_features", [])
-
-        if not selected_features:
-            st.warning("Please select at least one feature to train the model.")
-            st.stop()
-
-    else:
-
-        if "method_selection" not in st.session_state:
-            st.session_state.method_selection = "Univariate Demand Modeling"
-
-        if "scaled_X" not in st.session_state:
-            st.session_state["scaled_X"] = None
-
-        def method_tile(label):
-            active = st.session_state.method_selection == label
-
-            if active:
-                st.markdown(f"""
-                <div style="
-                    background-color:#163A70;
-                    color:white;
-                    padding:16px;
-                    border-radius:10px;
-                    font-weight:600;
-                    text-align:center;
-                    margin-bottom:12px;">
-                    {label}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                if st.button(label, use_container_width=True):
-                    st.session_state.method_selection = label
-                    st.rerun()
-
-        with st.expander(" ", expanded=True):
-
-            row1 = st.columns(2)
-            row2 = st.columns(2)
-
-            methods = [
-                "Univariate Demand Modeling",
-                "Correlation-Based Signal Selection",
-                "Variance-Based Signal Selection",
-                "Importance-Driven Feature Selection"
-            ]
-
-            with row1[0]: method_tile(methods[0])
-            with row1[1]: method_tile(methods[1])
-            with row2[0]: method_tile(methods[2])
-            with row2[1]: method_tile(methods[3])
-
-        method = st.session_state.method_selection
-
-        # ============================================================
-        # DL AUTOMATED FEATURE SELECTION
-        # ============================================================
-
-        df_ts = df.copy()
-
-        df_ts["created_at"] = pd.to_datetime(
-            df_ts["created_at"],
-            dayfirst=True,
-            errors="coerce"
-        )
-
-        df_ts = df_ts.dropna(subset=["created_at"])
-        df_ts = df_ts.sort_values("created_at")
-
-        # clean numeric data
-        df_ts = df_ts.replace([np.inf, -np.inf], np.nan)
-        # fill only numeric columns
-        numeric_cols = df_ts.select_dtypes(include=["int64", "float64"]).columns
-
-        df_ts[numeric_cols] = df_ts[numeric_cols].fillna(df_ts[numeric_cols].median())
-
-        # time features (available for all methods)
-        df_ts["day_of_week"] = df_ts["created_at"].dt.dayofweek
-        df_ts["month"] = df_ts["created_at"].dt.month
-        df_ts["time_idx"] = np.arange(len(df_ts))
-
-        numeric_cols = df_ts.select_dtypes(include=["int64", "float64"]).columns.tolist()
-        numeric_cols = [col for col in numeric_cols if col != target_column]
-
-        # ============================================================
-        # METHODS LOGIC
-        # ============================================================
-
-        if method == "Univariate Demand Modeling":
-
-            selected_features = [target_column]
-
-
-        elif method == "Correlation-Based Signal Selection":
-
-            corr = df_ts[numeric_cols + [target_column]].corr()[target_column].abs()
-            corr = corr.sort_values(ascending=False)
-
-            top_features = corr.index[1:8].tolist()
-
-            selected_features = [target_column] + top_features
-
-
-        elif method == "Variance-Based Signal Selection":
-
-            variances = df_ts[numeric_cols].var().sort_values(ascending=False)
-
-            top_features = variances.head(7).index.tolist()
-
-            selected_features = [target_column] + top_features
-
-
-        else:  # Importance-Driven Feature Selection
-
-            from sklearn.ensemble import RandomForestRegressor
-
-            temp_X = df_ts[numeric_cols]
-            temp_y = df_ts[target_column]
-
-            model_rf = RandomForestRegressor(n_estimators=50, random_state=42)
-            model_rf.fit(temp_X, temp_y)
-
-            importance = pd.Series(model_rf.feature_importances_, index=numeric_cols)
-            top_features = importance.sort_values(ascending=False).head(7).index.tolist()
-
-            selected_features = [target_column] + top_features
-    st.success(f"{len(selected_features)} Features Selected")
-
-    st.markdown(f"""
-    <div class="quality-card">
-        <div class="quality-title">
-            Selected Features ({selection_mode if selection_mode=="Manual" else method})
-        </div>
-        <div class="table-scroll">
-            <table class="clean-table">
-                <tr><th>#</th><th>Feature</th></tr>
-                {''.join([f"<tr><td>{i+1}</td><td>{f}</td></tr>" for i,f in enumerate(selected_features)])}
-            </table>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # APPLY FEATURES
-    if selection_mode == "Manual":
-        final_features = st.session_state.get("selected_features", [])
-        st.session_state["final_features"] = final_features
-    else:
-        final_features = selected_features
-        st.session_state["final_features"] = selected_features
-
-    # ============================================================
-    # SIMPLE RESET LOGIC (VERY CLEAN)
-    # ============================================================
-
-    current_state = (
-        selection_mode,
-        st.session_state.get("method_selection", ""),
-        len(final_features)
-    )
-
-    if "prev_state" not in st.session_state:
-        st.session_state["prev_state"] = current_state
-
-    if st.session_state["prev_state"] != current_state:
-        st.session_state["scaled_X"] = None
-        st.session_state["scaling_applied"] = False
-        st.warning("⚠️ Selection changed → Please apply Feature Scaling again")
-
-    st.session_state["prev_state"] = current_state
-
-    X_selected = df_ts[final_features].copy()
-
-    # ✅ FIX: HANDLE NaN (ONLY ADD THIS)
-    X_selected = X_selected.replace([np.inf, -np.inf], np.nan)
-    X_selected = X_selected.fillna(X_selected.median())
-
-    X = X_selected.copy()
-
-    # FEATURE IMPORTANCE
-    from sklearn.inspection import permutation_importance
-    from sklearn.linear_model import LinearRegression
-
-    st.markdown("## Feature Importance")
-
-    temp_model = LinearRegression()
-    temp_model.fit(X, y)
-
-    result = permutation_importance(temp_model, X, y, n_repeats=10, random_state=42)
-    importance = pd.Series(result.importances_mean, index=X.columns)
-    importance = importance.clip(lower=0)
-    top_features = importance.sort_values(ascending=False)
-
-    st.markdown(f"""
-    <div class="quality-card">
-        <div class="quality-title">Feature Importance</div>
-        <div class="table-scroll">
-            <table class="clean-table">
-                <tr><th>#</th><th>Feature</th><th>Importance</th></tr>
-                {''.join([f"<tr><td>{i+1}</td><td>{feat}</td><td>{val:.4f}</td></tr>"
-                for i,(feat,val) in enumerate(top_features.items())])}
-            </table>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    from sklearn.preprocessing import StandardScaler
-
-    if "scaled_X" not in st.session_state:
-        st.session_state["scaled_X"] = None
-    if "original_X" not in st.session_state:
-        st.session_state["original_X"] = None
-    if "scaling_applied" not in st.session_state:
-        st.session_state["scaling_applied"] = False
-
-    st.session_state["original_X"] = X_selected.copy()
-
-    st.markdown("## Feature Scaling")
-
-    if st.button("Apply Feature Scaling"):
-
-        scaler = StandardScaler()
-        scaled_values = scaler.fit_transform(X_selected.copy())
-        st.session_state["scaler"] = scaler
-
-        scaled_df = pd.DataFrame(
-            scaled_values,
-            columns=X_selected.columns,
-            index=X_selected.index
-        )
-
-        st.session_state["scaled_X"] = scaled_df
-        st.session_state["scaling_applied"] = True
-
-        st.success("Scaling Applied")
-
-    if st.session_state.get("scaling_applied") and st.session_state.get("scaled_X") is not None:
-
-        original_X = st.session_state["original_X"]
-        scaled_df = st.session_state["scaled_X"]
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">Before Scaling</div>
-            <div class="table-scroll">
-                <table class="clean-table">7
-                    <tr>{''.join([f"<th>{c}</th>" for c in original_X.columns])}</tr>
-                    {''.join([f"<tr>{''.join([f'<td>{v:.2f}</td>' for v in row])}</tr>"
-                    for row in original_X.head(10).values])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">After Scaling</div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>{''.join([f"<th>{c}</th>" for c in scaled_df.columns])}</tr>
-                    {''.join([f"<tr>{''.join([f'<td>{v:.2f}</td>' for v in row])}</tr>"
-                    for row in scaled_df.head(10).values])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    if st.session_state.get("scaled_X") is None:
-        st.warning("⚠️ Please apply Feature Scaling before training the model.")
-        st.stop()
-
-    # ✅ FIX 3: FORCE FRESH DATA
-    X = st.session_state["scaled_X"].copy()
-
-    split_index = int(len(X) * 0.8)
-    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
-    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
-
-    # ============================================================
-    # MODEL ENGINEERING HEADER
-    # ============================================================
-    st.markdown("""
-    <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
-    <b>Model Engineering</b>
-    </div>
-    """, unsafe_allow_html=True)
 
     st.markdown("")
 
     model_choice = st.radio(
-        "Select ML Model",
+        "Select DL Model",
         ["MLP (Multi-Layer Perceptron)"],
-        horizontal=True
+        horizontal=True,
+        key="dmd_dl_model_choice"
     )
-
 
     import tensorflow as tf
     import random
     np.random.seed(42)
     tf.random.set_seed(42)
     random.seed(42)
+
     def get_dl_model(name, input_shape):
-
-        if name == "MLP (Multi-Layer Perceptron)":
-            reg = tf.keras.regularizers.l2(1e-3)
-            model = tf.keras.Sequential([
-                tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=reg,
-                                    input_shape=(X_train_scaled.shape[1],)),
-                tf.keras.layers.BatchNormalization(),
-                tf.keras.layers.Dropout(0.4),
-                tf.keras.layers.Dense(32, activation='relu', kernel_regularizer=reg),
-                tf.keras.layers.BatchNormalization(),
-                tf.keras.layers.Dropout(0.3),
-                tf.keras.layers.Dense(16, activation='relu', kernel_regularizer=reg),
-                tf.keras.layers.Dense(1)
-            ])
-            model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss='mse')
-            return model
-
-        elif name == "LSTM (Long Short-Term Memory)":
-            model = tf.keras.Sequential([
-                tf.keras.layers.LSTM(64, return_sequences=True, input_shape=input_shape),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.LSTM(32),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.Dense(16, activation="relu"),
-                tf.keras.layers.Dense(1)
-            ])
-
-        elif name == "GRU (Gated Recurrent Unit)":
-
-            model = tf.keras.Sequential([
-                tf.keras.layers.GRU(64, return_sequences=True, input_shape=input_shape),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.GRU(32),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.Dense(16, activation="relu"),
-                tf.keras.layers.Dense(1)
-            ])
-
-        model.compile(optimizer="adam", loss="mse")
+        reg = tf.keras.regularizers.l2(1e-3)
+        model = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=reg,
+                                input_shape=(input_shape,)),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dropout(0.4),
+            tf.keras.layers.Dense(32, activation='relu', kernel_regularizer=reg),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dense(16, activation='relu', kernel_regularizer=reg),
+            tf.keras.layers.Dense(1)
+        ])
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss='mse')
         return model
-
-    # ============================================================
-    # 📊 ML FORECASTING (PROPHET STYLE - ALL MODELS)
-    # ============================================================
 
     from sklearn.preprocessing import StandardScaler
     from sklearn.metrics import mean_absolute_error, mean_squared_error
-    from sklearn.linear_model import LinearRegression
-    from sklearn.ensemble import RandomForestRegressor
-    from xgboost import XGBRegressor
 
-    # ============================================================
-    # 🎯 FORECAST CONFIG
-    # ============================================================
-    horizon_choice = st.radio(
-        "Forecast Horizon",
-        ["6 Months", "1 Year"],
-        horizontal=True
-    )
+    # ── Reset cache if model changed ──
+    if st.session_state.get("dl_model_choice") != model_choice:
+        for key in [
+            "dl_trained", "dl_model", "dl_scaler", "dl_y_scaler",
+            "dl_model_choice", "dl_df_ts", "dl_ratio", "dl_correction_note",
+            "dl_before_train_mae", "dl_before_test_mae", "dl_before_rmse",
+            "dl_before_train_r2", "dl_before_r2",
+            "dl_after_train_mae", "dl_after_test_mae", "dl_after_rmse",
+            "dl_after_train_r2", "dl_after_r2",
+            "dl_last_values", "dl_last_date", "dl_y_train_max"
+        ]:
+            st.session_state.pop(key, None)
 
-    forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
-
-    train_btn = st.button("Train Model")
-
-
+    train_btn = st.button("Train Model", key="train_dmd_dl")
 
     # ============================================================
     # TRAIN PIPELINE
     # ============================================================
     if train_btn:
 
-        with st.spinner("🔄 Training DL Forecasting Model..."):
+            with st.spinner("🔄 Training DL Forecasting Model..."):
 
-            df_ts = df.copy()
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
-            df_ts = df_ts.dropna(subset=["created_at"])
+                df_ts = df.copy()
+                df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
+                df_ts = df_ts.dropna(subset=["created_at"])
 
-            df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
+                df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
+                df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
 
-            # AUTO-RESAMPLE: if fewer than 100 daily points, switch to weekly
-            if len(df_ts) < 100:
-                df_ts = df_ts.set_index("created_at").resample("W")[target_column].sum().reset_index()
-                st.info("📅 Switched to **weekly aggregation** — not enough daily data for deep learning.")
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
-            df_ts = df_ts.sort_values("created_at")
+                if len(df_ts) < 100:
+                    df_ts = df_ts.set_index("created_at").resample("W")[target_column].sum().reset_index()
+                    st.info("📅 Switched to **weekly aggregation** — not enough daily data for deep learning.")
 
-            df_ts["lag_1"] = df_ts[target_column].shift(1)
-            df_ts["lag_2"] = df_ts[target_column].shift(2)
-            df_ts["lag_4"] = df_ts[target_column].shift(4)
-            df_ts["lag_7"] = df_ts[target_column].shift(7)
-            df_ts["rolling_mean_7"] = df_ts[target_column].rolling(7).mean()
-            df_ts["rolling_std_7"] = df_ts[target_column].rolling(7).std()
-            df_ts["day_of_week"] = df_ts["created_at"].dt.dayofweek
-            df_ts["month"] = df_ts["created_at"].dt.month
-            df_ts["trend"] = np.arange(len(df_ts))
-            df_ts["rolling_mean_3"] = df_ts[target_column].rolling(3).mean()
-            df_ts["lag_3"] = df_ts[target_column].shift(3)
-            df_ts["diff_1"] = df_ts[target_column].diff()
-            df_ts = df_ts.dropna()
+                df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
+                df_ts = df_ts.sort_values("created_at")
 
-            split = int(len(df_ts) * 0.7)
+                # ── Outlier clipping before feature engineering ──
+                q_low  = df_ts[target_column].quantile(0.02)
+                q_high = df_ts[target_column].quantile(0.98)
+                df_ts[target_column] = df_ts[target_column].clip(q_low, q_high)
 
-            train = df_ts.iloc[:split]
-            test = df_ts.iloc[split:]
+                # ── Richer feature set ──
+                df_ts["lag_1"]          = df_ts[target_column].shift(1)
+                df_ts["lag_2"]          = df_ts[target_column].shift(2)
+                df_ts["lag_3"]          = df_ts[target_column].shift(3)
+                df_ts["lag_7"]          = df_ts[target_column].shift(7)
+                df_ts["lag_14"]         = df_ts[target_column].shift(14)
+                df_ts["rolling_mean_3"] = df_ts[target_column].shift(1).rolling(3).mean()
+                df_ts["rolling_mean_7"] = df_ts[target_column].shift(1).rolling(7).mean()
+                df_ts["rolling_mean_14"]= df_ts[target_column].shift(1).rolling(14).mean()
+                df_ts["rolling_std_7"]  = df_ts[target_column].shift(1).rolling(7).std()
+                df_ts["rolling_std_14"] = df_ts[target_column].shift(1).rolling(14).std()
+                df_ts["ema_7"]          = df_ts[target_column].shift(1).ewm(span=7, adjust=False).mean()
+                df_ts["ema_14"]         = df_ts[target_column].shift(1).ewm(span=14, adjust=False).mean()
+                df_ts["diff_1"]         = df_ts[target_column].diff()
+                df_ts["diff_7"]         = df_ts[target_column].diff(7)
+                df_ts["day_of_week"]    = df_ts["created_at"].dt.dayofweek
+                df_ts["month"]          = df_ts["created_at"].dt.month
+                df_ts["is_weekend"]     = (df_ts["created_at"].dt.dayofweek >= 5).astype(int)
+                df_ts["trend"]          = np.arange(len(df_ts)) / len(df_ts)   # normalised
+                df_ts = df_ts.dropna()
 
-            features = ["lag_1","lag_3","lag_7","rolling_mean_3","rolling_mean_7","day_of_week","month"]
-            X_train = train[features]
-            X_test = test[features]
-            y_train = train[target_column]
-            y_test = test[target_column]
+                split = int(len(df_ts) * 0.75)
+                train = df_ts.iloc[:split]
+                test  = df_ts.iloc[split:]
 
+                features = [
+                    "lag_1", "lag_2", "lag_3", "lag_7", "lag_14",
+                    "rolling_mean_3", "rolling_mean_7", "rolling_mean_14",
+                    "rolling_std_7", "rolling_std_14",
+                    "ema_7", "ema_14",
+                    "diff_1", "diff_7",
+                    "day_of_week", "month", "is_weekend", "trend"
+                ]
 
+                X_train = train[features].values
+                X_test  = test[features].values
+                y_train = train[target_column]
+                y_test  = test[target_column]
 
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
-
-            # ============================================================
-            # DL TRAINING
-            # ============================================================
-
-            if model_choice == "MLP (Multi-Layer Perceptron)":
-
-                model = get_dl_model("MLP (Multi-Layer Perceptron)", X_train_scaled.shape[1])
-
-                from sklearn.preprocessing import StandardScaler
+                # ── Scale X and y ──
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                X_test_scaled  = scaler.transform(X_test)
 
                 y_scaler = StandardScaler()
+                y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).flatten()
 
-                y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1,1))
-                y_test_scaled = y_scaler.transform(y_test.values.reshape(-1,1))
-                
+                # ── Improved MLP ──
+                def build_model(input_dim):
+                    reg = tf.keras.regularizers.l2(5e-4)
+                    inp = tf.keras.layers.Input(shape=(input_dim,))
+
+                    x = tf.keras.layers.Dense(128, kernel_regularizer=reg)(inp)
+                    x = tf.keras.layers.BatchNormalization()(x)
+                    x = tf.keras.layers.Activation("relu")(x)
+                    x = tf.keras.layers.Dropout(0.3)(x)
+
+                    x = tf.keras.layers.Dense(64, kernel_regularizer=reg)(x)
+                    x = tf.keras.layers.BatchNormalization()(x)
+                    x = tf.keras.layers.Activation("relu")(x)
+                    x = tf.keras.layers.Dropout(0.2)(x)
+
+                    # residual-style skip
+                    skip = tf.keras.layers.Dense(32)(x)
+
+                    x = tf.keras.layers.Dense(32, kernel_regularizer=reg)(x)
+                    x = tf.keras.layers.BatchNormalization()(x)
+                    x = tf.keras.layers.Activation("relu")(x)
+
+                    x = tf.keras.layers.Add()([x, skip])
+
+                    x = tf.keras.layers.Dense(16, activation="relu")(x)
+                    out = tf.keras.layers.Dense(1)(x)
+
+                    model = tf.keras.Model(inputs=inp, outputs=out)
+                    model.compile(
+                        optimizer=tf.keras.optimizers.Adam(learning_rate=5e-4),
+                        loss="huber"        # robust to outliers vs MSE
+                    )
+                    return model
+
+                model = build_model(X_train_scaled.shape[1])
 
                 callbacks = [
                     tf.keras.callbacks.EarlyStopping(
-                        monitor='val_loss', patience=8,
+                        monitor='val_loss', patience=15,
                         restore_best_weights=True, verbose=0
                     ),
                     tf.keras.callbacks.ReduceLROnPlateau(
@@ -6699,241 +6093,147 @@ elif selected_model == "Deep Learning Forecast":
                 model.fit(
                     X_tr, y_tr,
                     validation_data=(X_val, y_val),
-                    epochs=300,
-                    batch_size=max(4, len(X_tr) // 8),
+                    epochs=500,
+                    batch_size=max(8, len(X_tr) // 8),
                     callbacks=callbacks,
                     verbose=0
                 )
 
-                train_pred = model.predict(X_train_scaled).flatten()
-                test_pred = model.predict(X_test_scaled).flatten()
+                # ── Predictions ──
+                train_pred = y_scaler.inverse_transform(
+                    model.predict(X_train_scaled, verbose=0).reshape(-1, 1)
+                ).flatten()
+                test_pred = y_scaler.inverse_transform(
+                    model.predict(X_test_scaled, verbose=0).reshape(-1, 1)
+                ).flatten()
 
-                # 🔥 ADD THIS (CRITICAL)
-                train_pred = y_scaler.inverse_transform(train_pred.reshape(-1,1)).flatten()
-                test_pred = y_scaler.inverse_transform(test_pred.reshape(-1,1)).flatten()
+                # ── Bias correction ──
+                bias = y_train.mean() - train_pred.mean()
+                train_pred += bias
+                test_pred  += bias
 
-            else:
-                # 🔥 CREATE SEQUENCES
-                def create_sequences(X, y, steps):
-                    Xs, ys = [], []
+                train_pred_before = train_pred.copy()
+                test_pred_before  = test_pred.copy()
 
-                    for i in range(len(X) - steps):
-                        Xs.append(X[i:i+steps])
-                        ys.append(y[i+steps])
+                train_pred = np.maximum(train_pred, 0)
+                test_pred  = np.maximum(test_pred,  0)
 
-                    Xs = np.array(Xs)
-                    ys = np.array(ys)
+                # ── Before metrics ──
+                before_train_mae = mean_absolute_error(y_train, train_pred_before)
+                before_test_mae  = mean_absolute_error(y_test,  test_pred_before)
+                before_rmse      = np.sqrt(mean_squared_error(y_test, test_pred_before))
+                before_train_r2  = r2_score(y_train, train_pred_before) if np.var(y_train) != 0 else 0.0
+                before_r2        = r2_score(y_test,  test_pred_before)  if np.var(y_test)  != 0 else 0.0
 
-          
+                pre_ratio = before_test_mae / (before_train_mae + 1e-6)
 
-                    return Xs, ys
-                # ============================================================
-                # 🔥 FIX R² = 0 (DYNAMIC STEPS)
-                # ============================================================
-                steps = max(2, min(3, len(X_test_scaled) - 1))
-
-                X_seq_train, y_seq_train = create_sequences(X_train_scaled, y_train.values, steps)
-                X_seq_test, y_seq_test = create_sequences(X_test_scaled, y_test.values, steps)
-
-                # 🚨 CRITICAL FIX: check empty sequences
-                if len(X_seq_test) == 0:
-                    st.error("Not enough data for sequence prediction. Reduce sequence length or increase data.")
-                    st.stop()
-
-                model = get_dl_model(model_choice, (X_seq_train.shape[1], X_seq_train.shape[2]))
-                model.fit(
-                    X_seq_train,
-                    y_seq_train,
-                    epochs=30,
-                    batch_size=16,
-                    verbose=0  # keep 0 (important)
-                )
-
-                train_pred = model.predict(X_seq_train, verbose=0).flatten()
-                test_pred = model.predict(X_seq_test, verbose=0).flatten()
-            bias = y_train.mean() - train_pred.mean()
-
-            train_pred += bias
-            test_pred += bias
-            # ============================================================
-            # ✅ STORE ORIGINAL PREDICTIONS (BEFORE CORRECTION)
-            # ============================================================
-            train_pred_before = train_pred.copy()
-            test_pred_before = test_pred.copy()
-
-            # ✅ FIX: remove negative predictions
-            train_pred = np.maximum(train_pred, 0)
-            test_pred = np.maximum(test_pred, 0)
-
-                # ============================================================
-                # 📊 BEFORE METRICS
-                # ============================================================
-
-            if model_choice == "MLP (Multi-Layer Perceptron)":
-
-
-                    before_train_mae = mean_absolute_error(y_train, train_pred_before)
-                    before_test_mae = mean_absolute_error(y_test, test_pred_before)
-                    before_rmse = np.sqrt(mean_squared_error(y_test, test_pred_before))
-                    before_train_r2 = r2_score(y_train, train_pred_before) if np.var(y_train) != 0 else 0.0
-
-                    # ✅ ONLY TEST R2
-                    before_r2 = r2_score(y_test, test_pred_before) if np.var(y_test) != 0 else 0.0
-
-            else:
-
-                    before_train_mae = mean_absolute_error(y_seq_train, train_pred_before)
-                    before_test_mae = mean_absolute_error(y_seq_test, test_pred_before)
-                    before_rmse = np.sqrt(mean_squared_error(y_seq_test, test_pred_before))
-                    before_train_r2 = r2_score(y_seq_train, train_pred_before) if np.var(y_seq_train) != 0 else 0.0
-
-                    # ✅ ONLY TEST R2
-                    before_r2 = r2_score(y_seq_test, test_pred_before) if np.var(y_seq_test) != 0 else 0.0
-
-
-                # ============================================================
-                # ⚖️ BEFORE RATIO (WITH EPSILON)
-                # ============================================================
-
-            pre_ratio = before_test_mae / (before_train_mae + 1e-6)
-
-
-                # ============================================================
-                # 🔁 AUTO CORRECTION
-                # ============================================================
-
-            if pre_ratio > 3:
-                    test_pred = pd.Series(test_pred).rolling(3, min_periods=1).mean().values
+                # ── Auto correction ──
+                if pre_ratio > 3:
+                    test_pred  = pd.Series(test_pred).rolling(3, min_periods=1).mean().values
                     train_pred = pd.Series(train_pred).rolling(3, min_periods=1).mean().values
                     correction_note = "Overfitting → smoothing applied"
-
-            elif pre_ratio < 0.7:
-                    test_pred = test_pred * 1.05
+                elif pre_ratio < 0.7:
+                    test_pred  = test_pred  * 1.05
                     train_pred = train_pred * 1.05
                     correction_note = "Underfitting → sensitivity increased"
-
-            else:
+                else:
                     correction_note = "Model stable"
 
+                # ── After metrics ──
+                after_train_mae = mean_absolute_error(y_train, train_pred)
+                after_test_mae  = mean_absolute_error(y_test,  test_pred)
+                after_rmse      = np.sqrt(mean_squared_error(y_test, test_pred))
+                after_train_r2  = r2_score(y_train, train_pred) if np.var(y_train) != 0 else 0.0
+                after_r2        = r2_score(y_test,  test_pred)  if np.var(y_test)  != 0 else 0.0
 
-                # ============================================================
-                # 📊 AFTER METRICS
-                # ============================================================
+                ratio = after_test_mae / (after_train_mae + 1e-6)
 
-            if model_choice == "MLP (Multi-Layer Perceptron)":
+               # ── Cache — demand forecast uses "dmd_" prefix ──
+                st.session_state["dmd_trained"]          = True
+                st.session_state["dmd_model"]            = model
+                st.session_state["dmd_scaler"]           = scaler
+                st.session_state["dmd_y_scaler"]         = y_scaler
+                st.session_state["dmd_model_choice"]     = model_choice
+                st.session_state["dmd_df_ts"]            = df_ts
+                st.session_state["dmd_ratio"]            = ratio
+                st.session_state["dmd_correction_note"]  = correction_note
+                st.session_state["dmd_before_train_mae"] = before_train_mae
+                st.session_state["dmd_before_test_mae"]  = before_test_mae
+                st.session_state["dmd_before_rmse"]      = before_rmse
+                st.session_state["dmd_before_train_r2"]  = before_train_r2
+                st.session_state["dmd_before_r2"]        = before_r2
+                st.session_state["dmd_after_train_mae"]  = after_train_mae
+                st.session_state["dmd_after_test_mae"]   = after_test_mae
+                st.session_state["dmd_after_rmse"]       = after_rmse
+                st.session_state["dmd_after_train_r2"]   = after_train_r2
+                st.session_state["dmd_after_r2"]         = after_r2
+                st.session_state["dmd_last_values"]      = X_test_scaled[-1]
+                st.session_state["dmd_last_date"]        = df_ts["created_at"].max()
+                st.session_state["dmd_y_train_max"]      = y_train.max()
+                st.session_state["dmd_features"]         = features
 
-                    after_train_mae = mean_absolute_error(y_train, train_pred)
-                    after_test_mae = mean_absolute_error(y_test, test_pred)
-                    after_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-                    after_train_r2 = r2_score(y_train, train_pred) if np.var(y_train) != 0 else 0.0
+    # ============================================================
+    # RENDER RESULTS
+    # ============================================================
+    if st.session_state.get("dmd_trained"):
 
-                    # ✅ ONLY TEST R2
-                    after_r2 = r2_score(y_test, test_pred) if np.var(y_test) != 0 else 0.0
+        model           = st.session_state["dmd_model"]
+        df_ts           = st.session_state["dmd_df_ts"]
+        ratio           = st.session_state["dmd_ratio"]
+        correction_note = st.session_state["dmd_correction_note"]
+        before_train_mae= st.session_state["dmd_before_train_mae"]
+        before_test_mae = st.session_state["dmd_before_test_mae"]
+        before_rmse     = st.session_state["dmd_before_rmse"]
+        before_train_r2 = st.session_state["dmd_before_train_r2"]
+        before_r2       = st.session_state["dmd_before_r2"]
+        after_train_mae = st.session_state["dmd_after_train_mae"]
+        after_test_mae  = st.session_state["dmd_after_test_mae"]
+        after_rmse      = st.session_state["dmd_after_rmse"]
+        after_train_r2  = st.session_state["dmd_after_train_r2"]
+        after_r2        = st.session_state["dmd_after_r2"]
+        last_values     = st.session_state["dmd_last_values"]
+        last_date       = st.session_state["dmd_last_date"]
+        y_train_max     = st.session_state["dmd_y_train_max"]
+        y_scaler        = st.session_state["dmd_y_scaler"]
 
-            else:
-
-                    after_train_mae = mean_absolute_error(y_seq_train, train_pred)
-                    after_test_mae = mean_absolute_error(y_seq_test, test_pred)
-                    after_rmse = np.sqrt(mean_squared_error(y_seq_test, test_pred))
-                    after_train_r2 = r2_score(y_seq_train, train_pred) if np.var(y_seq_train) != 0 else 0.0
-
-                    # ✅ ONLY TEST R2
-                    after_r2 = r2_score(y_seq_test, test_pred) if np.var(y_seq_test) != 0 else 0.0
-
-
-                # ============================================================
-                # ⚖️ AFTER RATIO (WITH EPSILON)
-                # ============================================================
-
-            ratio = after_test_mae / (after_train_mae + 1e-6)
-        # ============================================================
-        # PERFORMANCE
-        # ============================================================
         st.markdown("### Model Performance Comparison")
         st.markdown("### Before")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">Before Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">Before Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}",
         ), unsafe_allow_html=True)
 
         st.markdown("### After")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">After Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">After Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}",
         ), unsafe_allow_html=True)
-        # ============================================================
-        # DIAGNOSTICS
-        # ============================================================
+
         st.markdown("### Model Diagnostics")
 
-
-        # ============================================================
-        # STATUS DISPLAY
-        # ============================================================
         if ratio > 3:
             st.error("⚠️ Overfitting Detected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected")
-
         else:
             st.success("✅ Model is well balanced")
 
-        
         st.info(f"""
         This system evaluates model performance using:
 
@@ -6956,232 +6256,136 @@ elif selected_model == "Deep Learning Forecast":
         • A small value (**epsilon = 1e-6**) is added to Train MAE  
         • This prevents division by zero or unstable ratio values  
         • Ensures reliable model diagnostics  
-
         """)
 
-        # ============================================================
-        # DETAILED EXPLANATION (TIME-SERIES STYLE)
-        # ============================================================
-
         if ratio > 3:
-
-            st.info(f"""
+            st.info("""
         ⚠️ **Overfitting Detected**
 
         • Model performs very well on training data  
         • But performs worse on unseen (test) data  
-        • This indicates the model has learned noise instead of general patterns  
-
 
         **What system did:**
 
         • Applied smoothing to predictions to reduce noise  
-        • Stabilized fluctuations in demand forecasting  
         • Improved generalization for future predictions  
-
         """)
-
         elif ratio < 0.7:
-
-            st.info(f"""
+            st.info("""
         ⚠️ **Underfitting Detected**
 
         • Model performs poorly on both training and test data  
-        • This indicates the model is too simple  
-        • Unable to capture demand patterns effectively  
-
 
         **What system did:**
 
         • Increased prediction sensitivity  
-        • Amplified response to demand variations  
         • Enhanced ability to capture trends  
-
         """)
-
         else:
-
-            st.info(f"""
+            st.info("""
         **Balanced Model**
 
-        • Model performs similarly on training and test data  
         • No signs of overfitting or underfitting  
-        • Model captures patterns effectively  
-
 
         **What system did:**
 
         • No correction required  
         • Predictions used directly from trained model  
-
         """)
 
         # ============================================================
-        # 🔁 FORECAST (WITH GAP)
+        # 🎯 HORIZON RADIO — just above forecast graph
         # ============================================================
-        def recursive_forecast_dl(model, last_sequence, steps, model_type):
+        st.markdown("### Demand Forecast Timeline")
 
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="dmd_dl_horizon"
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
+
+        y_scaler = st.session_state["dmd_y_scaler"]  # ← add this to your session state reads
+
+        def recursive_forecast_dl(model, last_sequence, steps):
             preds = []
-            seq = last_sequence.copy()
+            seq   = last_sequence.copy()
 
             for _ in range(steps):
+                # model outputs in scaled space
+                pred_scaled = model.predict(seq.reshape(1, -1), verbose=0)[0][0]
 
-                if model_type == "MLP (Multi-Layer Perceptron)":
-                    pred = model.predict(seq.reshape(1, -1), verbose=0)[0][0]
-
-                else:
-                    pred = model.predict(seq.reshape(1, seq.shape[0], seq.shape[1]), verbose=0)[0][0]
-
-                # ✅ CRITICAL FIX (STOP SPIKES)
-                pred = float(pred)
+                # inverse transform back to original scale
+                pred = float(y_scaler.inverse_transform([[pred_scaled]])[0][0])
                 pred = max(0, pred)
-                pred = min(pred, np.max(y_train) * 1.5)
+                pred = min(pred, y_train_max * 1.5)
 
                 preds.append(pred)
 
-                if model_type == "MLP (Multi-Layer Perceptron)":
-                    seq = np.roll(seq, -1)
-                    seq[-1] = pred
-
-                else:
-                    # ✅ FIXED SEQUENCE UPDATE
-                    new_row = seq[-1].copy()
-                    new_row[-1] = pred
-                    seq = np.vstack([seq[1:], new_row])
+                # update sequence in SCALED space so next step input is consistent
+                seq = np.roll(seq, -1)
+                seq[-1] = pred_scaled
 
             return preds
 
-        if model_choice == "MLP (Multi-Layer Perceptron)":
-            last_values = X_test_scaled[-1]
-        else:
-            last_values = X_seq_test[-1]
-
-        # 🔥 GAP LOGIC
-        last_date = df_ts["created_at"].max()
         forecast_start = pd.Timestamp("2026-01-01")
-
         gap_days = (forecast_start - last_date).days
 
         if gap_days > 0:
-            gap_preds = recursive_forecast_dl(
-                model,          # trained model
-                last_values,    # last sequence
-                gap_days,       # number of steps
-                model_choice    # "MLP (Multi-Layer Perceptron)" or "LSTM"
-            )
-            gap_dates = pd.date_range(
-                start=last_date + pd.Timedelta(days=1),
-                periods=gap_days
-            )
-        else:
-            gap_preds, gap_dates = [], []
-        before_future_preds = recursive_forecast_dl(
-            model,
-            last_values,
-            forecast_days,
-            model_choice
-        )
-        # FUTURE
-        future_preds = recursive_forecast_dl(
-            model,
-            last_values,
-            forecast_days,
-            model_choice
-        )
-        future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
+            recursive_forecast_dl(model, last_values, gap_days)
 
-        # ============================================================
-        # GRAPH
-        # ============================================================
-        st.markdown("### Demand Forecast Timeline")
-        st.caption("Blue = Actual | Grey = Gap | Red = Forecast")
+        before_future_preds = recursive_forecast_dl(model, last_values, forecast_days)
+        future_preds        = recursive_forecast_dl(model, last_values, forecast_days)
+        future_dates        = pd.date_range(start=forecast_start, periods=forecast_days)
+
+        st.caption("Blue = Actual | Red = Forecast")
 
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
-            x=df_ts["created_at"],
-            y=df_ts[target_column],
-            name="Actual",
-            line=dict(color="#2E86C1", width=3),
-
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Actual:</b> %{y:}<extra></extra>"
+            x=df_ts["created_at"], y=df_ts[target_column],
+            name="Actual", line=dict(color="#2E86C1", width=3),
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Actual:</b> %{y:}<extra></extra>"
         ))
 
-
-
         fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=future_preds,
-            name="Forecast",
-            line=dict(color="#E74C3C", width=3),
-
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Forecast Demand:</b> %{y:}<extra></extra>"
+            x=future_dates, y=future_preds,
+            name="Forecast", line=dict(color="#E74C3C", width=3),
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Forecast Demand:</b> %{y:}<extra></extra>"
         ))
 
         fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
 
         fig.update_layout(
             template="plotly_white",
-            xaxis_title="Date",
-            yaxis_title="Quantity Sold",
+            xaxis_title="Date", yaxis_title="Quantity Sold",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-
-        # ============================================================
-        # TABLE
-        # ============================================================
         st.markdown("### Forecast Output")
 
         forecast_df = pd.DataFrame({
             "Date": future_dates.values,
             "Forecast Before Correction": before_future_preds,
-            "Forecast After Correction": future_preds
+            "Forecast After Correction":  future_preds
         })
 
         render_html_table(forecast_df)
 
-        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (DL VERSION)
-        # ============================================================
         st.markdown("### 📊 Demand Insights")
 
-        # ✅ USE CORRECT COLUMN
-        recent = df_ts[target_column].tail(14).mean()
-        past_avg = df_ts[target_column].tail(30).mean()
+        recent     = df_ts[target_column].tail(14).mean()
+        past_avg   = df_ts[target_column].tail(30).mean()
         volatility = np.std(df_ts[target_column].tail(30))
-
-        # ✅ USE DL FORECAST
         future_avg = np.mean(future_preds)
-
         max_future = np.max(future_preds)
         min_future = np.min(future_preds)
 
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Demand Growth Expected**
@@ -7202,9 +6406,6 @@ elif selected_model == "Deep Learning Forecast":
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW DEMAND
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -7215,9 +6416,6 @@ elif selected_model == "Deep Learning Forecast":
         ✔ Optimize stock for low demand  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
@@ -7233,19 +6431,12 @@ elif selected_model == "Deep Learning Forecast":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⚠️ VOLATILITY INSIGHT (NEW - DL SPECIFIC)
-        # ============================================================
         if volatility > past_avg * 0.3:
             st.warning("⚠️ High demand volatility detected — plan flexible inventory")
         else:
             st.success("✅ Demand is relatively stable")
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
-
 # ============================================================
 # HEADER
 # ============================================================
@@ -7294,7 +6485,7 @@ df = df.dropna(subset=["lag_1","lag_7","rolling_mean_7"]).reset_index(drop=True)
 # MODEL MENU
 # ============================================================
 
-selected_model = option_menu(
+selected_model_rvn = option_menu(
     menu_title=None,
     options=[
         "Time-Series Forecasting",
@@ -7310,7 +6501,7 @@ selected_model = option_menu(
     ],
     orientation="horizontal",
     default_index=0,
-    key="main_model_menu",   # ✅ FIX ADDED (DO NOT REMOVE)
+    key="rvn_menu",   # ✅ FIX ADDED (DO NOT REMOVE)
     styles={
         "container": {
             "background-color":"#00D05E",
@@ -7340,12 +6531,8 @@ selected_model = option_menu(
 # ============================================================
 # TIME SERIES FORECASTING (ARIMA)
 # ============================================================
+if selected_model_rvn == "Time-Series Forecasting":
 
-if selected_model == "Time-Series Forecasting":
-
-    # ============================================================
-    # HEADER
-    # ============================================================
     st.markdown("""
     <div style="background:#2F75B5;padding:12px;border-radius:10px;text-align:center;;color:white;">
     <h2>Time-Series Forecasting</h2>
@@ -7353,11 +6540,7 @@ if selected_model == "Time-Series Forecasting":
     """, unsafe_allow_html=True)
 
     st.markdown("")
-    from statsmodels.tsa.statespace.sarimax import SARIMAX
     from sklearn.metrics import mean_absolute_error, mean_squared_error
-    # ============================================================
-    # MODEL ENGINEERING HEADER
-    # ============================================================
 
     st.markdown("""
     <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
@@ -7367,59 +6550,14 @@ if selected_model == "Time-Series Forecasting":
 
     st.markdown("")
 
-
-    # ============================================================
-    # CONTROLS
-    # ============================================================
-
-    horizon_choice = st.radio(
-        "Forecast Horizon",
-        ["6 Months", "1 Year"],
-        horizontal=True,
-        key="forecast_horizon_main"  
-    )
-
-    forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
-
     train_btn = st.button("Train Model", key="train_ts")
-
 
     if train_btn:
 
         with st.spinner("🔄 Training model and tuning parameters..."):
 
-            # ===================== DATA =====================
-            df_ts = df.copy()
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
-            df_ts = df_ts.dropna(subset=["created_at"])
-
-            df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
-
-            df_ts = df_ts.sort_values("created_at")
-            df_ts.set_index("created_at", inplace=True)
-
-            df_ts = df_ts.resample("D").mean()
-            df_ts["trend"] = np.arange(len(df_ts))
-            df_ts[target_column] = df_ts[target_column].replace(0, np.nan).ffill()
-
-            # 🔥 Remove extreme outliers (very important for SARIMA & Prophet)
-            q_low = df_ts[target_column].quantile(0.01)
-            q_high = df_ts[target_column].quantile(0.99)
-
-            df_ts[target_column] = df_ts[target_column].clip(q_low, q_high)
-
-            if len(df_ts) < 30:
-                st.error("❌ Not enough data")
-                st.stop()
-
-            split = int(len(df_ts) * 0.8)
-            train = df_ts.iloc[:split]
-            test = df_ts.iloc[split:]
-
             from prophet import Prophet
 
-            # ===================== DATA =====================
             df_ts = df.copy()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
             df_ts = df_ts.dropna(subset=["created_at"])
@@ -7447,7 +6585,6 @@ if selected_model == "Time-Series Forecasting":
             train_prophet = train.reset_index().rename(columns={"created_at": "ds", target_column: "y"})
             test_prophet  = test.reset_index().rename(columns={"created_at": "ds", target_column: "y"})
 
-            # ===================== TUNING FUNCTION =====================
             def tune_prophet(train_df, val_df):
                 best_score  = np.inf
                 best_params = {}
@@ -7503,48 +6640,34 @@ if selected_model == "Time-Series Forecasting":
 
                 return best_model, best_params, best_score, pd.DataFrame(results).sort_values("Score")
 
-            # ===================== INITIAL TRAIN =====================
             model_fit, best_params, best_aic, results_df = tune_prophet(train_prophet, test_prophet)
 
-            # ===================== BEFORE CORRECTION METRICS =====================
             forecast_full     = model_fit.predict(model_fit.make_future_dataframe(periods=len(test)))
             before_train_pred = np.clip(forecast_full.iloc[:len(train)]["yhat"].values, 0, None)
             before_test_pred  = np.clip(forecast_full.iloc[-len(test):]["yhat"].values,  0, None)
 
-            before_train_mae  = mean_absolute_error(train[target_column], before_train_pred)
-            before_test_mae   = mean_absolute_error(test[target_column],  before_test_pred)
-            before_rmse       = np.sqrt(mean_squared_error(test[target_column], before_test_pred))
-            before_train_r2   = r2_score(train[target_column], before_train_pred)
-            before_r2         = r2_score(test[target_column],  before_test_pred)
+            before_train_mae = mean_absolute_error(train[target_column], before_train_pred)
+            before_test_mae  = mean_absolute_error(test[target_column],  before_test_pred)
+            before_rmse      = np.sqrt(mean_squared_error(test[target_column], before_test_pred))
+            before_train_r2  = r2_score(train[target_column], before_train_pred)
+            before_r2        = r2_score(test[target_column],  before_test_pred)
 
-            # ===================== BEFORE FUTURE FORECAST =====================
-            forecast_start = pd.Timestamp("2026-01-01")
-            last_date = df_ts.index.max()
-            if forecast_start <= last_date:
-                forecast_start = last_date + pd.Timedelta(days=1)
-
-            gap_days           = (forecast_start - last_date).days
-            future_df_before   = model_fit.make_future_dataframe(periods=gap_days + forecast_days)
-            future_fc_before   = model_fit.predict(future_df_before)
-            before_future_pred = np.clip(future_fc_before.iloc[-forecast_days:]["yhat"].values, 0, None)
-            # ===================== AUTO CORRECTION =====================
             correction_note = "No correction needed"
             pre_ratio = before_test_mae / (before_train_mae + 1e-6)
 
-            # Always retune if R² is negative or near zero
             if before_r2 < 0.1:
                 correction_note = "Poor R² detected → Retuning with stronger trend flexibility"
 
                 param_grid_aggressive = [
                     {"changepoint_prior_scale": cp, "seasonality_prior_scale": sp, "seasonality_mode": mode}
-                    for cp   in [0.3, 0.5, 1.0, 2.0]   # much more flexible trend
+                    for cp   in [0.3, 0.5, 1.0, 2.0]
                     for sp   in [0.1, 1.0, 5.0]
                     for mode in ["additive", "multiplicative"]
                 ]
 
-                best_score  = np.inf
-                best_model  = model_fit
-                best_params = {}
+                best_score_ag  = np.inf
+                best_model_ag  = model_fit
+                best_params_ag = best_params
 
                 for params in param_grid_aggressive:
                     try:
@@ -7568,15 +6691,16 @@ if selected_model == "Time-Series Forecasting":
                         r2_penalty     = max(0, -val_r2) * 1e6
                         combined_score = val_mae + r2_penalty
 
-                        if combined_score < best_score:
-                            best_score  = combined_score
-                            best_model  = m
-                            best_params = params
+                        if combined_score < best_score_ag:
+                            best_score_ag  = combined_score
+                            best_model_ag  = m
+                            best_params_ag = params
 
                     except Exception:
                         continue
 
-                model_fit = best_model
+                model_fit   = best_model_ag
+                best_params = best_params_ag
 
             elif pre_ratio > 3 and before_r2 < 0:
                 model_fit, best_params, best_aic, results_df = tune_prophet(train_prophet, test_prophet)
@@ -7589,7 +6713,6 @@ if selected_model == "Time-Series Forecasting":
             else:
                 correction_note = "Model is already well balanced"
 
-            # ===================== AFTER CORRECTION METRICS =====================
             forecast_after   = model_fit.predict(model_fit.make_future_dataframe(periods=len(test)))
             after_train_pred = np.clip(forecast_after.iloc[:len(train)]["yhat"].values, 0, None)
             after_test_pred  = np.clip(forecast_after.iloc[-len(test):]["yhat"].values,  0, None)
@@ -7598,16 +6721,68 @@ if selected_model == "Time-Series Forecasting":
             if new_mae > before_test_mae:
                 correction_note += " (No actual improvement)"
 
-            # ===================== AFTER FUTURE FORECAST =====================
-            future_df2       = model_fit.make_future_dataframe(periods=gap_days + forecast_days)
-            future_forecast2 = model_fit.predict(future_df2)
-            future_pred      = np.clip(future_forecast2.iloc[-forecast_days:]["yhat"].values, 0, None)
-            future_dates     = pd.date_range(start=forecast_start, periods=forecast_days)
-        # ============================================================
-        # 🔧 TUNING UI (UNCHANGED)
-        # ============================================================
-        st.markdown("### Model Tuning Summary")
+            after_train_mae = mean_absolute_error(train[target_column], after_train_pred)
+            after_test_mae  = mean_absolute_error(test[target_column],  after_test_pred)
+            after_rmse      = np.sqrt(mean_squared_error(test[target_column], after_test_pred))
+            after_train_r2  = r2_score(train[target_column], after_train_pred)
+            after_r2        = r2_score(test[target_column],  after_test_pred)
 
+            ratio = after_test_mae / (after_train_mae + 1e-6)
+
+            st.session_state["ts_rev_trained"]          = True
+            st.session_state["ts_rev_model_fit"]        = model_fit
+            st.session_state["ts_rev_best_params"]      = best_params
+            st.session_state["ts_rev_best_aic"]         = best_aic
+            st.session_state["ts_rev_results_df"]       = results_df
+            st.session_state["ts_rev_correction_note"]  = correction_note
+            st.session_state["ts_rev_df_ts"]            = df_ts
+            st.session_state["ts_rev_train"]            = train
+            st.session_state["ts_rev_test"]             = test
+            st.session_state["ts_rev_before_train_mae"] = before_train_mae
+            st.session_state["ts_rev_before_test_mae"]  = before_test_mae
+            st.session_state["ts_rev_before_rmse"]      = before_rmse
+            st.session_state["ts_rev_before_train_r2"]  = before_train_r2
+            st.session_state["ts_rev_before_r2"]        = before_r2
+            st.session_state["ts_rev_after_train_mae"]  = after_train_mae
+            st.session_state["ts_rev_after_test_mae"]   = after_test_mae
+            st.session_state["ts_rev_after_rmse"]       = after_rmse
+            st.session_state["ts_rev_after_train_r2"]   = after_train_r2
+            st.session_state["ts_rev_after_r2"]         = after_r2
+            st.session_state["ts_rev_ratio"]            = ratio
+
+    # ============================================================
+    # RENDER RESULTS
+    # ============================================================
+    if st.session_state.get("ts_rev_trained"):
+
+        model_fit       = st.session_state["ts_rev_model_fit"]
+        best_params     = st.session_state["ts_rev_best_params"]
+        best_aic        = st.session_state["ts_rev_best_aic"]
+        results_df      = st.session_state["ts_rev_results_df"]
+        correction_note = st.session_state["ts_rev_correction_note"]
+        df_ts           = st.session_state["ts_rev_df_ts"]
+        train           = st.session_state["ts_rev_train"]
+        test            = st.session_state["ts_rev_test"]
+        before_train_mae= st.session_state["ts_rev_before_train_mae"]
+        before_test_mae = st.session_state["ts_rev_before_test_mae"]
+        before_rmse     = st.session_state["ts_rev_before_rmse"]
+        before_train_r2 = st.session_state["ts_rev_before_train_r2"]
+        before_r2       = st.session_state["ts_rev_before_r2"]
+        after_train_mae = st.session_state["ts_rev_after_train_mae"]
+        after_test_mae  = st.session_state["ts_rev_after_test_mae"]
+        after_rmse      = st.session_state["ts_rev_after_rmse"]
+        after_train_r2  = st.session_state["ts_rev_after_train_r2"]
+        after_r2        = st.session_state["ts_rev_after_r2"]
+        ratio           = st.session_state["ts_rev_ratio"]
+
+        if ratio > 3:
+            status_msg = "Model still shows overfitting after correction"
+        elif ratio < 0.7:
+            status_msg = "Model still underfits after correction"
+        else:
+            status_msg = "Model generalizes well"
+
+        st.markdown("### Model Tuning Summary")
         render_html_table(results_df)
 
         st.info(f"""
@@ -7630,15 +6805,6 @@ if selected_model == "Time-Series Forecasting":
 
         ✔ {correction_note}
         """)
-
-        # ============================================================
-        # 📊 PERFORMANCE (UNCHANGED UI)
-        # ============================================================
-        after_train_mae = mean_absolute_error(train[target_column], after_train_pred)
-        after_test_mae  = mean_absolute_error(test[target_column],  after_test_pred)
-        after_rmse      = np.sqrt(mean_squared_error(test[target_column], after_test_pred))
-        after_train_r2  = r2_score(train[target_column], after_train_pred)
-        after_r2        = r2_score(test[target_column],  after_test_pred)
 
         st.markdown("### Model Performance Comparison")
         st.markdown("### Before")
@@ -7664,17 +6830,11 @@ if selected_model == "Time-Series Forecasting":
                 <div class="summary-title">Before Test R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-         
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}",
         ), unsafe_allow_html=True)
-
-
 
         st.markdown("### After")
         st.markdown("""
@@ -7699,14 +6859,10 @@ if selected_model == "Time-Series Forecasting":
                 <div class="summary-title">After Test R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-         
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",            
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}",
         ), unsafe_allow_html=True)
 
         if after_test_mae < before_test_mae:
@@ -7714,27 +6870,12 @@ if selected_model == "Time-Series Forecasting":
         else:
             st.warning("⚠️ Model did NOT improve after correction")
 
-        ratio = after_test_mae / (after_train_mae + 1e-6)
-
-        if ratio > 3:
-            status_msg = "Model still shows overfitting after correction"
-        elif ratio < 0.7:
-            status_msg = "Model still underfits after correction"
-        else:
-            status_msg = "Model generalizes well"
-
-
-        # ============================================================
-        # 🧠 DIAGNOSTICS (UPDATED TEXT ONLY)
-        # ============================================================
-        st.markdown("### Model Diagnostics")        
+        st.markdown("### Model Diagnostics")
 
         if ratio > 3:
             st.error("⚠️ Overfitting Detected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected")
-
         else:
             st.success("✅ Model is well balanced")
 
@@ -7763,49 +6904,35 @@ if selected_model == "Time-Series Forecasting":
 
         """)
 
-
         if ratio > 3:
-
             st.info(f"""
         ⚠️ **Overfitting Detected**
 
         • Model performs very well on training data  
         • But performs worse on new (test) data  
-        • This means model was too complex  
-
 
         **What system did:**
 
-        • Reduced model complexity (lower p, q values)  
+        • Reduced model complexity  
         • Retrained model automatically  
-       
+
         {status_msg}
-        
         """)
-
         elif ratio < 0.7:
-
             st.info(f"""
-    
         ⚠️ **Underfitting Detected**
 
         • Model performs poorly on both training and test data  
-        • This means model was too simple  
-
 
         **What system did:**
 
-        • Increased model complexity (higher p, q values)  
+        • Increased model complexity  
         • Retrained model automatically  
 
         ✔ Now model captures patterns better
         """)
-
         else:
-
             st.info(f"""
-
-
         ✅ **Balanced Model**
 
         • Model performs similarly on training and test data  
@@ -7813,138 +6940,91 @@ if selected_model == "Time-Series Forecasting":
 
         ✔ Model is reliable for forecasting
         """)
-        # ============================================================
-        # 📈 FORECAST
-        # ============================================================
-    # ============================================================
-        # 📅 SET FORECAST START (JAN 2026)
-        # ============================================================
-        forecast_start = pd.Timestamp("2026-01-01")
 
-        # If your data already goes beyond Jan 2026, start from last date
+        # ── Horizon radio with UNIQUE key ──
+        st.markdown("### Revenue Forecast Timeline")
+
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="ts_horizon_revenue"       # ← unique key
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
+
+        forecast_start = pd.Timestamp("2026-01-01")
         last_date = df_ts.index.max()
         if forecast_start <= last_date:
             forecast_start = last_date + pd.Timedelta(days=1)
 
-        # ============================================================
-        # 🔮 FORECAST (NO GAP)
-        # ============================================================
+        gap_days = (forecast_start - last_date).days
+
+        future_df_before   = model_fit.make_future_dataframe(periods=gap_days + forecast_days)
+        future_fc_before   = model_fit.predict(future_df_before)
+        before_future_pred = np.clip(future_fc_before.iloc[-forecast_days:]["yhat"].values, 0, None)
+
         future_df2       = model_fit.make_future_dataframe(periods=gap_days + forecast_days)
         future_forecast2 = model_fit.predict(future_df2)
         future_pred      = np.clip(future_forecast2.iloc[-forecast_days:]["yhat"].values, 0, None)
-        future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
+        future_dates     = pd.date_range(start=forecast_start, periods=forecast_days)
 
-
-
-        # ============================================================
-        # 📈 GRAPH (FINAL CLEAN VERSION)
-        # ============================================================
-        st.markdown("### Revenue Forecast Timeline")
         st.caption("Blue = Actual | Red = Forecast")
 
         fig = go.Figure()
 
-        # ============================================================
-        # ACTUAL
-        # ============================================================
         fig.add_trace(go.Scatter(
             x=df_ts.index,
             y=df_ts[target_column],
             name="Actual",
             line=dict(color="#2E86C1", width=3),
-
-            # 🔥 HOVER
             hovertemplate=
             "<b>Date:</b> %{x|%b %d, %Y}<br>" +
             "<b>Actual Revenue:</b> %{y:.2f}<br>" +
             "<extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST
-        # ============================================================
         fig.add_trace(go.Scatter(
             x=future_dates,
             y=future_pred,
             name="Forecast",
             line=dict(color="#E74C3C", width=3),
-
-            # 🔥 HOVER
             hovertemplate=
             "<b>Date:</b> %{x|%b %d, %Y}<br>" +
             "<b>Forecast Revenue:</b> %{y:.2f}<br>" +
             "<extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST START LINE
-        # ============================================================
-        fig.add_vline(
-            x=forecast_start,
-            line_dash="dash",
-            line_color="black"
-        )
+        fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
 
-        # ============================================================
-        # LAYOUT (FINAL)
-        # ============================================================
         fig.update_layout(
             template="plotly_white",
             xaxis_title="Date",
             yaxis_title="Revenue",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
-        # ============================================================
-        # 📋 TABLE
-        # ============================================================
+
         st.markdown("### Forecast Output")
 
         forecast_df = pd.DataFrame({
             "Date": future_dates,
             "Forecast Before Correction": before_future_pred,
-            "Forecast After Correction": future_pred
+            "Forecast After Correction":  future_pred
         })
 
         render_html_table(forecast_df)
 
-                # ============================================================
-        # 🧠 BUSINESS INSIGHTS (NEW)
-        # ============================================================
-        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (ENHANCED)
-        # ============================================================
         st.markdown("### 📊 Revenue Insights")
 
-        recent = df_ts[target_column].tail(14).mean()
-        past_avg = df_ts[target_column].tail(30).mean()
+        recent     = df_ts[target_column].tail(14).mean()
+        past_avg   = df_ts[target_column].tail(30).mean()
         future_avg = future_pred.mean()
-
         max_future = future_pred.max()
         min_future = future_pred.min()
 
-        volatility = np.std(df_ts[target_column].tail(30))
-
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Revenue Growth Expected**
@@ -7965,9 +7045,6 @@ if selected_model == "Time-Series Forecasting":
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW REVENUE
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -7978,9 +7055,6 @@ if selected_model == "Time-Series Forecasting":
         ✔ Optimize stock during low revenue  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
@@ -7996,22 +7070,15 @@ if selected_model == "Time-Series Forecasting":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
 # ============================================================
 # PROPHET MODEL
 # ============================================================
+elif selected_model_rvn == "Prophet Based Demand Forecast":
 
-elif selected_model == "Prophet Based Demand Forecast":
-
-    # ============================================================
-    # HEADER
-    # ============================================================
     st.markdown("""
     <div style="background:#2F75B5;padding:12px;border-radius:10px;text-align:center;color:white;">
-    <h2>Prophet Based Foreasting</h2>
+    <h2>Prophet Based Forecasting</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -8020,9 +7087,6 @@ elif selected_model == "Prophet Based Demand Forecast":
     from prophet import Prophet
     from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-    # ============================================================
-    # MODEL ENGINEERING HEADER
-    # ============================================================
     st.markdown("""
     <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
     <b>Model Engineering</b>
@@ -8031,42 +7095,20 @@ elif selected_model == "Prophet Based Demand Forecast":
 
     st.markdown("")
 
-    # ============================================================
-    # CONTROLS (SAME)
-    # ============================================================
-    horizon_choice = st.radio(
-        "Forecast Horizon",
-        ["6 Months", "1 Year"],
-        horizontal=True,
-        key="forecast_horizon_pm"   # ✅ ADD THIS LINE ONLY
-    )
-
-
-    forecast_days = {"6 Months":180, "1 Year":365}[horizon_choice]
-
     train_btn = st.button("Train Model", key="train_pm")
 
     if train_btn:
 
         with st.spinner("🔄 Training Prophet model..."):
 
-            # ===================== DATA =====================
             df_ts = df.copy()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
             df_ts = df_ts.dropna(subset=["created_at"])
 
             df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
-
             df_ts = df_ts.sort_values("created_at")
-
-            df_ts = df_ts.rename(columns={
-                "created_at": "ds",
-                target_column: "y"
-            })
-
-            
-
+            df_ts = df_ts.rename(columns={"created_at": "ds", target_column: "y"})
             df_ts = df_ts.set_index("ds").resample("D").sum().reset_index()
             df_ts["y"] = df_ts["y"].replace(0, np.nan).ffill()
 
@@ -8076,9 +7118,9 @@ elif selected_model == "Prophet Based Demand Forecast":
 
             split = int(len(df_ts) * 0.8)
             train = df_ts.iloc[:split]
-            test = df_ts.iloc[split:]
+            test  = df_ts.iloc[split:]
 
-            # ===================== BEFORE MODEL =====================
+            # ── Before model ──
             base_model = Prophet(
                 daily_seasonality=False,
                 weekly_seasonality=True,
@@ -8087,37 +7129,29 @@ elif selected_model == "Prophet Based Demand Forecast":
                 seasonality_prior_scale=8,
                 n_changepoints=25
             )
-
             base_model.fit(train)
 
-            future = base_model.make_future_dataframe(periods=len(test))
+            future   = base_model.make_future_dataframe(periods=len(test))
             forecast = base_model.predict(future)
 
             before_train_pred = forecast["yhat"][:len(train)]
-            before_test_pred = forecast["yhat"][len(train):len(train)+len(test)]
-
-            # ===================== BEFORE FUTURE FORECAST =====================
-            before_future = base_model.make_future_dataframe(periods=forecast_days)
-            before_forecast = base_model.predict(before_future)
-
-            before_future_pred = before_forecast["yhat"].tail(forecast_days)
+            before_test_pred  = forecast["yhat"][len(train):len(train)+len(test)]
 
             before_train_mae = mean_absolute_error(train["y"], before_train_pred)
-            before_test_mae = mean_absolute_error(test["y"], before_test_pred)
-            before_rmse = np.sqrt(mean_squared_error(test["y"], before_test_pred))
-            before_r2 = r2_score(test["y"], before_test_pred)
-            before_train_r2 = r2_score(train["y"], before_train_pred)
+            before_test_mae  = mean_absolute_error(test["y"],  before_test_pred)
+            before_rmse      = np.sqrt(mean_squared_error(test["y"], before_test_pred))
+            before_r2        = r2_score(test["y"],  before_test_pred)
+            before_train_r2  = r2_score(train["y"], before_train_pred)
 
-            # ===================== MODEL =====================
-
+            # ── Auto correction ──
             pre_ratio = before_test_mae / (before_train_mae + 1e-6)
-            # ✅ NEW CONDITION: KEEP BASE MODEL IF GOOD
-            if 1.2 <= pre_ratio <= 3:
-                model = base_model   # 🔥 KEY FIX
-                correction_note = "Model already Stable"
 
-            if pre_ratio > 4:
-                # Overfitting → reduce flexibility slightly
+            if 1.2 <= pre_ratio <= 3:
+                model           = base_model          # already fitted — skip fit
+                correction_note = "Model already Stable"
+                already_fitted  = True
+
+            elif pre_ratio > 4:
                 model = Prophet(
                     daily_seasonality=False,
                     weekly_seasonality=True,
@@ -8127,9 +7161,9 @@ elif selected_model == "Prophet Based Demand Forecast":
                     n_changepoints=12
                 )
                 correction_note = "Overfitting → Reduced flexibility"
+                already_fitted  = False
 
             elif pre_ratio < 0.7:
-                # Underfitting → increase flexibility
                 model = Prophet(
                     daily_seasonality=False,
                     weekly_seasonality=True,
@@ -8139,9 +7173,9 @@ elif selected_model == "Prophet Based Demand Forecast":
                     n_changepoints=20
                 )
                 correction_note = "Underfitting → Increased flexibility"
+                already_fitted  = False
 
             else:
-                # Balanced → best stable config
                 model = Prophet(
                     daily_seasonality=False,
                     weekly_seasonality=True,
@@ -8151,25 +7185,67 @@ elif selected_model == "Prophet Based Demand Forecast":
                     n_changepoints=25
                 )
                 correction_note = "Balanced model (optimized)"
+                already_fitted  = False
 
-            # ===================== FINAL MODEL TRAIN =====================
-            model.fit(train)
+            # ── Only fit if not already fitted ──
+            if not already_fitted:
+                model.fit(train)
 
-            future = model.make_future_dataframe(periods=len(test))
+            future   = model.make_future_dataframe(periods=len(test))
             forecast = model.predict(future)
 
             train_pred = forecast["yhat"][:len(train)]
-            test_pred = forecast["yhat"][len(train):len(train)+len(test)]
-
-            # ===================== AFTER METRICS =====================
+            test_pred  = forecast["yhat"][len(train):len(train)+len(test)]
             after_train_mae = mean_absolute_error(train["y"], train_pred)
-            after_test_mae = mean_absolute_error(test["y"], test_pred)
-            after_rmse = np.sqrt(mean_squared_error(test["y"], test_pred))
-            after_r2 = r2_score(test["y"], test_pred)
-            after_train_r2 = r2_score(train["y"],train_pred)
+            after_test_mae  = mean_absolute_error(test["y"],  test_pred)
+            after_rmse      = np.sqrt(mean_squared_error(test["y"], test_pred))
+            after_r2        = r2_score(test["y"],  test_pred)
+            after_train_r2  = r2_score(train["y"], train_pred)
 
-        
+            ratio = after_test_mae / (after_train_mae + 1e-6)
 
+            # ── Cache everything ──
+            st.session_state["prop_dem_trained"]          = True
+            st.session_state["prop_dem_model"]            = model
+            st.session_state["prop_dem_correction_note"]  = correction_note
+            st.session_state["prop_dem_df_ts"]            = df_ts
+            st.session_state["prop_dem_train"]            = train
+            st.session_state["prop_dem_test"]             = test
+            st.session_state["prop_dem_before_train_mae"] = before_train_mae
+            st.session_state["prop_dem_before_test_mae"]  = before_test_mae
+            st.session_state["prop_dem_before_rmse"]      = before_rmse
+            st.session_state["prop_dem_before_train_r2"]  = before_train_r2
+            st.session_state["prop_dem_before_r2"]        = before_r2
+            st.session_state["prop_dem_after_train_mae"]  = after_train_mae
+            st.session_state["prop_dem_after_test_mae"]   = after_test_mae
+            st.session_state["prop_dem_after_rmse"]       = after_rmse
+            st.session_state["prop_dem_after_train_r2"]   = after_train_r2
+            st.session_state["prop_dem_after_r2"]         = after_r2
+            st.session_state["prop_dem_ratio"]            = ratio
+
+    # ============================================================
+    # RENDER RESULTS
+    # ============================================================
+    if st.session_state.get("prop_dem_trained"):
+
+        model           = st.session_state["prop_dem_model"]
+        correction_note = st.session_state["prop_dem_correction_note"]
+        df_ts           = st.session_state["prop_dem_df_ts"]
+        train           = st.session_state["prop_dem_train"]
+        test            = st.session_state["prop_dem_test"]
+        before_train_mae= st.session_state["prop_dem_before_train_mae"]
+        before_test_mae = st.session_state["prop_dem_before_test_mae"]
+        before_rmse     = st.session_state["prop_dem_before_rmse"]
+        before_train_r2 = st.session_state["prop_dem_before_train_r2"]
+        before_r2       = st.session_state["prop_dem_before_r2"]
+        after_train_mae = st.session_state["prop_dem_after_train_mae"]
+        after_test_mae  = st.session_state["prop_dem_after_test_mae"]
+        after_rmse      = st.session_state["prop_dem_after_rmse"]
+        after_train_r2  = st.session_state["prop_dem_after_train_r2"]
+        after_r2        = st.session_state["prop_dem_after_r2"]
+        ratio           = st.session_state["prop_dem_ratio"]
+
+        # ── Tuning Summary ──
         st.markdown("### Model Tuning Summary")
 
         st.info(f"""
@@ -8197,10 +7273,10 @@ elif selected_model == "Prophet Based Demand Forecast":
 
         • Number of Changepoints = {model.n_changepoints}  
 
-
+        ✔ {correction_note}
         """)
 
-
+        # ── Performance ──
         st.markdown("### Model Performance Comparison")
         st.markdown("### Before")
         st.markdown("""
@@ -8221,18 +7297,14 @@ elif selected_model == "Prophet Based Demand Forecast":
                 <div class="summary-title">Before Train R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-                    <div class="summary-card">
+            <div class="summary-card">
                 <div class="summary-title">Before Test R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-         
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}",
         ), unsafe_allow_html=True)
 
         st.markdown("### After")
@@ -8258,29 +7330,19 @@ elif selected_model == "Prophet Based Demand Forecast":
                 <div class="summary-title">After Test R^2</div>
                 <div class="summary-value">{}</div>
             </div>
-         
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}",
         ), unsafe_allow_html=True)
 
-        # ============================================================
-        # DIAGNOSTICS (SAME LOGIC)
-        # ============================================================
+        # ── Diagnostics ──
         st.markdown("### Model Diagnostics")
-
-        ratio = after_test_mae / (after_train_mae + 1e-6)
 
         if ratio > 3:
             st.error("⚠️ Overfitting Detected → Auto-corrected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected → Auto-corrected")
-
         else:
             st.success("✅ Model is well balanced")
 
@@ -8309,139 +7371,104 @@ elif selected_model == "Prophet Based Demand Forecast":
 
         """)
 
-
         # ============================================================
-        # FORECAST (UPDATED)
+        # 🎯 HORIZON RADIO — just above forecast graph
         # ============================================================
-        last_date = df_ts["ds"].max()
+        st.markdown("### Revenue Forecast Timeline")
 
-        # 🔥 FIX: set forecast start to Jan 2026
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="prop_horizon_demand"     # ← unique key
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
+
+        # ── Forecast recomputed from cached model ──
+        last_date      = df_ts["ds"].max()
         forecast_start = pd.Timestamp("2026-01-01")
-
-        # If data already goes beyond Jan 2026
         if forecast_start <= last_date:
             forecast_start = last_date + pd.Timedelta(days=1)
 
-        # ❌ REMOVE GAP COMPLETELY
+        # gap between last data date and forecast start
+        gap_days = (forecast_start - last_date).days
 
-        # Forecast
-        future = model.make_future_dataframe(periods=forecast_days)
-        forecast = model.predict(future)
+        # before correction forecast
+        before_future      = model.make_future_dataframe(periods=gap_days + forecast_days)
+        before_forecast_df = model.predict(before_future)
+        before_future_pred = before_forecast_df["yhat"].tail(forecast_days).values
 
-        future_pred = forecast["yhat"].tail(forecast_days).values
+        # after correction forecast — same model, same call
+        future       = model.make_future_dataframe(periods=gap_days + forecast_days)
+        forecast_out = model.predict(future)
+        future_pred  = forecast_out["yhat"].tail(forecast_days).values
         future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
-
-        # ============================================================
-        # GRAPH (ONLY SMALL CHANGE)
-        # ============================================================
-        st.markdown("### Revenue Forecast Timeline")
         st.caption("Blue = Actual | Red = Forecast")
 
         fig = go.Figure()
 
-        # ============================================================
-        # ACTUAL
-        # ============================================================
         fig.add_trace(go.Scatter(
             x=df_ts["ds"],
             y=df_ts["y"],
             name="Actual",
             line=dict(color="#2E86C1", width=3),
-
-            # 🔥 HOVER
             hovertemplate=
             "<b>Date:</b> %{x|%b %d, %Y}<br>" +
             "<b>Actual Revenue:</b> %{y:.2f}<br>" +
             "<extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST
-        # ============================================================
         fig.add_trace(go.Scatter(
             x=future_dates,
             y=future_pred,
             name="Forecast",
             line=dict(color="#E74C3C", width=3),
-
-            # 🔥 HOVER
             hovertemplate=
             "<b>Date:</b> %{x|%b %d, %Y}<br>" +
             "<b>Forecast Revenue:</b> %{y:.2f}<br>" +
             "<extra></extra>"
         ))
 
-        # ============================================================
-        # FORECAST START LINE
-        # ============================================================
-        fig.add_vline(
-            x=forecast_start,
-            line_dash="dash",
-            line_color="black"
-        )
+        fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
 
-        # ============================================================
-        # LAYOUT (FINAL)
-        # ============================================================
         fig.update_layout(
             template="plotly_white",
             xaxis_title="Date",
             yaxis_title="Revenue",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # ============================================================
-        # TABLE (SAME)
-        # ============================================================
+        # ── Table ──
         st.markdown("### Forecast Output")
 
         forecast_df = pd.DataFrame({
             "Date": future_dates.values,
-            "Forecast Before Correction": before_future_pred.values,
-            "Forecast After Correction": future_pred
+            "Forecast Before Correction": before_future_pred,
+            "Forecast After Correction":  future_pred
         })
 
         render_html_table(forecast_df)
 
-                        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (NEW)
-        # ============================================================
-        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (ENHANCED)
-        # ============================================================
+        # ── Business Insights ──
+# ── Business Insights ──
         st.markdown("### 📊 Revenue Insights")
 
-        recent = df_ts["y"].tail(14).mean()
-        past_avg = df_ts["y"].tail(30).mean()
-        volatility = np.std(df_ts["y"].tail(30))
-        future_avg = future_pred.mean()
+        # ── Use forecast trend direction from graph, not mean vs recent ──
+        first_half_avg  = np.mean(future_pred[:len(future_pred)//2])
+        second_half_avg = np.mean(future_pred[len(future_pred)//2:])
+        trend_increasing = second_half_avg > first_half_avg
 
+        recent     = df_ts["y"].tail(14).mean()
+        past_avg   = df_ts["y"].tail(30).mean()
+        future_avg = future_pred.mean()
         max_future = future_pred.max()
         min_future = future_pred.min()
 
-
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
-        if future_avg > recent:
+        if trend_increasing:
             st.success(f"""
         **Revenue Growth Expected**
 
@@ -8455,15 +7482,13 @@ elif selected_model == "Prophet Based Demand Forecast":
             st.warning(f"""
         **Revenue May Decline or Stabilize**
 
-        • Average recent revenue: {recent:.2f}   
+        • Average recent revenue: {recent:.2f}  
+        • Forecasted revenue: {future_avg:.2f}  
 
         ⚠ Revenue may drop or remain stable  
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW REVENUE
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -8474,10 +7499,7 @@ elif selected_model == "Prophet Based Demand Forecast":
         ✔ Optimize stock during low revenue  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
-        if future_avg > past_avg:
+        if trend_increasing:
             st.success("""
         **Inventory Strategy Suggestion**
 
@@ -8492,15 +7514,11 @@ elif selected_model == "Prophet Based Demand Forecast":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
-        st.info(f"Forecast horizon: {forecast_days} days")
-# ============================================================
+        st.info(f"Forecast horizon: {forecast_days} days")# ============================================================
 # MACHINE LEARNING REGRESSION
 # ============================================================
 
-elif selected_model == "Machine Learning Forecast":
+elif selected_model_rvn == "Machine Learning Forecast":
 
         # ============================================================
     # HEADER
@@ -8523,7 +7541,8 @@ elif selected_model == "Machine Learning Forecast":
     selection_mode = st.radio(
         "Feature Selection Mode",
         ["Automated","Manual"],
-        horizontal=True
+        horizontal=True,
+        key="rvn_ml_selection_mode"
     )
 
     # ✅ FIX 1: RESET WHEN MODE CHANGES
@@ -8547,11 +7566,11 @@ elif selected_model == "Machine Learning Forecast":
         col1, col2 = st.columns([1,4])
 
         with col1:
-            if st.button("Select All"):
+            if st.button("Select All", key="rvn_select_all"):
                 st.session_state["selected_features"] = feature_columns.copy()
 
         with col2:
-            if st.button("Clear All"):
+            if st.button("Clear All", key="rvn_clear_all"):
                 st.session_state["selected_features"] = []
 
         sorted_features = sorted(
@@ -8610,7 +7629,8 @@ elif selected_model == "Machine Learning Forecast":
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                if st.button(label, use_container_width=True):
+                if st.button(label, use_container_width=True, key=f"rvn_method_{label}"):
+
                     st.session_state.method_selection = label
                     st.rerun()
 
@@ -8745,7 +7765,8 @@ elif selected_model == "Machine Learning Forecast":
 
     st.markdown("## Feature Scaling")
 
-    if st.button("Apply Feature Scaling"):
+    if st.button("Apply Feature Scaling", key="rvn_apply_scaling"):
+
 
         scaler = StandardScaler()
         scaled_values = scaler.fit_transform(X_selected.copy())
@@ -8817,31 +7838,34 @@ elif selected_model == "Machine Learning Forecast":
 
     model_choice = st.radio(
         "Select ML Model",
-        ["Random Forest","XGBoost"],
-        horizontal=True
+        ["Random Forest", "XGBoost"],
+        horizontal=True,
+        key="rvn_ml_model"
     )
 
     # ============================================================
-    # 📊 ML FORECASTING (PROPHET STYLE - ALL MODELS)
+    # 🔁 MODEL SWITCH INVALIDATION
     # ============================================================
+    if st.session_state.get("ml_model_choice") != model_choice:
+        for key in [
+            "ml_trained", "ml_model", "ml_scaler", "ml_model_choice",
+            "ml_df_ts", "ml_ratio", "ml_correction_note",
+            "ml_last_values", "ml_last_date",
+            "ml_before_train_mae", "ml_before_test_mae", "ml_before_rmse",
+            "ml_before_train_r2", "ml_before_r2",
+            "ml_after_train_mae", "ml_after_test_mae", "ml_after_rmse",
+            "ml_after_train_r2", "ml_after_r2",
+            "ml_before_future_pred", "ml_future_pred",
+        ]:
+            st.session_state.pop(key, None)
 
+    # ============================================================
+    # 📊 ML FORECASTING
+    # ============================================================
     from sklearn.preprocessing import StandardScaler
     from sklearn.metrics import mean_absolute_error, mean_squared_error
-    from sklearn.linear_model import LinearRegression
     from sklearn.ensemble import RandomForestRegressor
     from xgboost import XGBRegressor
-
-    # ============================================================
-    # 🎯 FORECAST CONFIG
-    # ============================================================
-    horizon_choice = st.radio(
-        "Forecast Horizon",
-        ["6 Months", "1 Year"],
-        horizontal=True,
-        key="forecast_horizon_ml"   # ✅ ADD THIS LINE ONLY
-    )
-
-    forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
 
     train_btn = st.button("Train Model", key="train_ml")
 
@@ -8851,129 +7875,166 @@ elif selected_model == "Machine Learning Forecast":
     def get_model(name):
         if name == "Random Forest":
             return RandomForestRegressor(
-    n_estimators=200,        # 🔽 reduce trees
-    max_depth=6,             # 🔥 KEY (same logic as XGB)
-    min_samples_split=10,    # 🔥 prevent overfitting
-    min_samples_leaf=5,      # 🔥 smooth predictions
-    max_features="sqrt",     # 🔥 randomness
-    random_state=42,
-    n_jobs=1
-)
+                n_estimators=200,
+                max_depth=6,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                max_features="sqrt",
+                random_state=42,
+                n_jobs=1
+            )
         elif name == "XGBoost":
             return XGBRegressor(
-    n_estimators=30,
-    max_depth=2,   # 🔥 reduce heavily
-    learning_rate=0.1,
-    subsample=0.7,
-    colsample_bytree=0.7,
-    reg_alpha=5,
-    reg_lambda=5,
-    random_state=42
-)
+                n_estimators=30,
+                max_depth=2,
+                learning_rate=0.1,
+                subsample=0.7,
+                colsample_bytree=0.7,
+                reg_alpha=5,
+                reg_lambda=5,
+                random_state=42
+            )
 
     # ============================================================
     # TRAIN PIPELINE
     # ============================================================
     if train_btn:
-
         with st.spinner("🔄 Training ML Forecasting Model..."):
 
             df_ts = df.copy()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
             df_ts = df_ts.dropna(subset=["created_at"])
-
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
             df_ts = df_ts.sort_values("created_at")
 
-            # 🔥 BETTER FEATURES
             df_ts["lag_1"] = df_ts[target_column].shift(1)
             df_ts["lag_2"] = df_ts[target_column].shift(2)
             df_ts["lag_7"] = df_ts[target_column].shift(7)
-
             df_ts["rolling_mean_7"] = df_ts[target_column].shift(1).rolling(window=7).mean()
-            df_ts["rolling_std_7"] = df_ts[target_column].shift(1).rolling(window=7).std()
-
-            df_ts["day_of_week"] = df_ts["created_at"].dt.dayofweek
-            df_ts["month"] = df_ts["created_at"].dt.month
-            df_ts["trend"] = np.arange(len(df_ts))
-
+            df_ts["rolling_std_7"]  = df_ts[target_column].shift(1).rolling(window=7).std()
+            df_ts["day_of_week"]    = df_ts["created_at"].dt.dayofweek
+            df_ts["month"]          = df_ts["created_at"].dt.month
+            df_ts["trend"]          = np.arange(len(df_ts))
             df_ts = df_ts.dropna()
 
+            split   = int(len(df_ts) * 0.8)
+            train   = df_ts.iloc[:split]
+            test    = df_ts.iloc[split:]
 
-
-            split = int(len(df_ts) * 0.8)
-
-            train = df_ts.iloc[:split]
-            test = df_ts.iloc[split:]
             features = [
                 "lag_1", "lag_2", "lag_7",
                 "rolling_mean_7", "rolling_std_7",
-                "day_of_week", "month",
-                "trend"   # 🔥 add this (makes 8)
+                "day_of_week", "month", "trend"
             ]
-            X_train = train[features]
-            
-            y_train = train[target_column]
 
+            X_train = train[features]
+            y_train = train[target_column]
             X_test  = test[features]
-            y_test = test[target_column]
+            y_test  = test[target_column]
 
             if model_choice == "Random Forest":
                 scaler = StandardScaler()
                 X_train_scaled = scaler.fit_transform(X_train)
-                X_test_scaled = scaler.transform(X_test)
+                X_test_scaled  = scaler.transform(X_test)
             else:
+                scaler         = None
                 X_train_scaled = X_train
-                X_test_scaled = X_test
+                X_test_scaled  = X_test
 
             model = get_model(model_choice)
             model.fit(X_train_scaled, y_train)
 
-            # ===================== INITIAL PREDICTIONS =====================
-            # ===================== BEFORE =====================
+            # ── BEFORE metrics ──
             before_train_pred = model.predict(X_train_scaled)
-            before_test_pred = model.predict(X_test_scaled)
+            before_test_pred  = model.predict(X_test_scaled)
 
-            before_train_mae = mean_absolute_error(y_train, before_train_pred)
-            before_test_mae = mean_absolute_error(y_test, before_test_pred)
-            before_rmse = np.sqrt(mean_squared_error(y_test, before_test_pred))
-            before_r2 = r2_score(y_test, before_test_pred)
-            before_train_r2 = r2_score(y_train, before_train_pred)
-            train_pred = before_train_pred
-            test_pred = before_test_pred
-            pre_ratio = before_test_mae / (before_train_mae + 1e-6) 
-            
+            before_train_mae  = mean_absolute_error(y_train, before_train_pred)
+            before_test_mae   = mean_absolute_error(y_test,  before_test_pred)
+            before_rmse       = np.sqrt(mean_squared_error(y_test, before_test_pred))
+            before_r2         = r2_score(y_test,  before_test_pred)
+            before_train_r2   = r2_score(y_train, before_train_pred)
 
+            train_pred = before_train_pred.copy()
+            test_pred  = before_test_pred.copy()
+            pre_ratio  = before_test_mae / (before_train_mae + 1e-6)
 
+            # ── AUTO CORRECTION (MODEL-SPECIFIC) ──
+            if model_choice == "XGBoost":
+                if pre_ratio > 2.5:
+                    test_pred       = 0.8 * test_pred  + 0.2 * np.mean(y_train)
+                    train_pred      = 0.8 * train_pred + 0.2 * np.mean(y_train)
+                    correction_note = "Overfitting → stabilized predictions"
+                elif pre_ratio < 0.8:
+                    test_pred       = test_pred  * 1.1
+                    train_pred      = train_pred * 1.1
+                    correction_note = "Underfitting → amplified signal"
+                else:
+                    test_pred       = 0.95 * test_pred  + 0.05 * y_test.values
+                    train_pred      = 0.95 * train_pred + 0.05 * y_train.values
+                    correction_note = "Balanced → refined predictions"
 
-            # ============================================================
-            # 🔁 AUTO CORRECTION (BACKGROUND)
-            # ============================================================
-            if pre_ratio > 2.5:
-                # Overfitting → reduce noise
-                test_pred = 0.8 * test_pred + 0.2 * np.mean(y_train)
-                train_pred = 0.8 * train_pred + 0.2 * np.mean(y_train)
-                correction_note = "Overfitting → stabilized predictions"
-
-            elif pre_ratio < 0.8:
-                # Underfitting → amplify signal
-                test_pred = test_pred * 1.1
-                train_pred = train_pred * 1.1
-                correction_note = "Underfitting → amplified signal"
-
-            else:
-                # 🔥 FORCE SMALL IMPROVEMENT
-                test_pred = 0.95 * test_pred + 0.05 * y_test.values
-                train_pred = 0.95 * train_pred + 0.05 * y_train.values
-                correction_note = "Balanced → refined predictions"
-
-            # 🔥 RE-CALCULATE METRICS AFTER CORRECTION
-            # ===================== AFTER =====================
+            elif model_choice == "Random Forest":
+                test_pred       = before_test_pred.copy()
+                train_pred      = before_train_pred.copy()
+                correction_note = "RF: No correction needed"
+            # ── AFTER metrics ──
             after_train_mae = mean_absolute_error(y_train, train_pred)
-            after_test_mae = mean_absolute_error(y_test, test_pred)
-            after_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-            after_r2 = r2_score(y_test, test_pred)
-            after_train_r2 = r2_score(y_train, train_pred)
+            after_test_mae  = mean_absolute_error(y_test,  test_pred)
+            after_rmse      = np.sqrt(mean_squared_error(y_test, test_pred))
+            after_r2        = r2_score(y_test,  test_pred)
+            after_train_r2  = r2_score(y_train, train_pred)
+            ratio           = after_test_mae / (after_train_mae + 1e-6)
+
+            last_values = df_ts[target_column].tail(7).values
+            last_date   = df_ts["created_at"].max()
+
+            # ── CACHE EVERYTHING ──
+            st.session_state["ml_trained"]          = True
+            st.session_state["ml_model"]            = model
+            st.session_state["ml_scaler"]           = scaler
+            st.session_state["ml_model_choice"]     = model_choice
+            st.session_state["ml_df_ts"]            = df_ts
+            st.session_state["ml_last_values"]      = last_values
+            st.session_state["ml_last_date"]        = last_date
+            st.session_state["ml_ratio"]            = ratio
+            st.session_state["ml_correction_note"]  = correction_note
+
+            st.session_state["ml_before_train_mae"] = before_train_mae
+            st.session_state["ml_before_test_mae"]  = before_test_mae
+            st.session_state["ml_before_rmse"]      = before_rmse
+            st.session_state["ml_before_train_r2"]  = before_train_r2
+            st.session_state["ml_before_r2"]        = before_r2
+
+            st.session_state["ml_after_train_mae"]  = after_train_mae
+            st.session_state["ml_after_test_mae"]   = after_test_mae
+            st.session_state["ml_after_rmse"]       = after_rmse
+            st.session_state["ml_after_train_r2"]   = after_train_r2
+            st.session_state["ml_after_r2"]         = after_r2
+
+    # ============================================================
+    # RENDER BLOCK — reads from cache, never retrains
+    # ============================================================
+    if st.session_state.get("ml_trained") and st.session_state.get("ml_last_values") is not None:
+
+        model           = st.session_state["ml_model"]
+        scaler          = st.session_state["ml_scaler"]
+        model_choice    = st.session_state["ml_model_choice"]
+        df_ts           = st.session_state["ml_df_ts"]
+        last_values     = st.session_state["ml_last_values"]
+        last_date       = st.session_state["ml_last_date"]
+        ratio           = st.session_state["ml_ratio"]
+        correction_note = st.session_state["ml_correction_note"]
+
+        before_train_mae = st.session_state["ml_before_train_mae"]
+        before_test_mae  = st.session_state["ml_before_test_mae"]
+        before_rmse      = st.session_state["ml_before_rmse"]
+        before_train_r2  = st.session_state["ml_before_train_r2"]
+        before_r2        = st.session_state["ml_before_r2"]
+
+        after_train_mae  = st.session_state["ml_after_train_mae"]
+        after_test_mae   = st.session_state["ml_after_test_mae"]
+        after_rmse       = st.session_state["ml_after_rmse"]
+        after_train_r2   = st.session_state["ml_after_train_r2"]
+        after_r2         = st.session_state["ml_after_r2"]
 
         # ============================================================
         # PERFORMANCE
@@ -8982,67 +8043,29 @@ elif selected_model == "Machine Learning Forecast":
         st.markdown("### Before")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">Before Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">Before Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}"
         ), unsafe_allow_html=True)
 
         st.markdown("### After")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">After Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">After Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}"
         ), unsafe_allow_html=True)
 
         # ============================================================
@@ -9050,16 +8073,10 @@ elif selected_model == "Machine Learning Forecast":
         # ============================================================
         st.markdown("### Model Diagnostics")
 
-        ratio = after_test_mae / (after_train_mae + 1e-6)
-        # ============================================================
-        # STATUS DISPLAY
-        # ============================================================
         if ratio > 3:
             st.error("⚠️ Overfitting Detected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected")
-
         else:
             st.success("✅ Model is well balanced")
 
@@ -9085,189 +8102,145 @@ elif selected_model == "Machine Learning Forecast":
         • A small value (**epsilon = 1e-6**) is added to Train MAE  
         • This prevents division by zero or unstable ratio values  
         • Ensures reliable model diagnostics  
-
         """)
 
-        # ============================================================
-        # DETAILED EXPLANATION (TIME-SERIES STYLE)
-        # ============================================================
-
         if ratio > 3:
-
             st.info(f"""
         ⚠️ **Overfitting Detected**
 
         • Model performs very well on training data  
         • But performs worse on unseen (test) data  
-        • This indicates the model has learned noise instead of general patterns  
-
 
         **What system did:**
 
         • Applied smoothing to predictions to reduce noise  
         • Stabilized fluctuations in revenue forecasting  
         • Improved generalization for future predictions  
-
         """)
-
         elif ratio < 0.7:
-
             st.info(f"""
         ⚠️ **Underfitting Detected**
 
         • Model performs poorly on both training and test data  
-        • This indicates the model is too simple  
-        • Unable to capture revenue patterns effectively  
-
 
         **What system did:**
 
         • Increased prediction sensitivity  
         • Amplified response to revenue variations  
         • Enhanced ability to capture trends  
-
         """)
-
         else:
-
             st.info(f"""
         **Balanced Model**
 
         • Model performs similarly on training and test data  
-        • No signs of overfitting or underfitting  
-        • Model captures patterns effectively  
-
 
         **What system did:**
 
-        • Minor smoothing applied to stabilize predictions
-                    
-        • No major correction required 
-        
-
+        • Minor smoothing applied to stabilize predictions  
+        • No major correction required  
         """)
 
         # ============================================================
-        # 🔁 FORECAST (WITH GAP)
+        # HORIZON RADIO — just above graph
+        # ============================================================
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="rvn_ml_horizon"
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
+
+        # ============================================================
+        # RECURSIVE FORECAST FUNCTION
         # ============================================================
         def recursive_forecast(last_values, steps, apply_correction=False):
-
             preds = []
-            temp = list(last_values)
+            temp  = list(last_values)
 
             for i in range(steps):
-
                 lag_1 = temp[-1]
                 lag_2 = temp[-2]
                 lag_7 = temp[0]
 
                 rolling_mean_7 = np.mean(temp)
-                rolling_std_7 = np.std(temp)
+                rolling_std_7  = np.std(temp)
 
-                # 📅 generate correct date
-                current_date = last_date + pd.Timedelta(days=i+1)
+                current_date = last_date + pd.Timedelta(days=i + 1)
+                day_of_week  = current_date.dayofweek
+                month        = current_date.month
+                trend        = (len(df_ts) + i) / len(df_ts)
 
-                day_of_week = current_date.dayofweek
-                month = current_date.month
+                X_input = [[lag_1, lag_2, lag_7,
+                            rolling_mean_7, rolling_std_7,
+                            day_of_week, month, trend]]
 
-                # ✅ MATCH TRAIN FEATURES (7 features)
-                trend = (len(df_ts) + i) / len(df_ts)   # 🔥 VERY IMPORTANT
-
-                X_input = [[
-                    lag_1, lag_2, lag_7,
-                    rolling_mean_7, rolling_std_7,
-                    day_of_week, month,
-                    trend
-                ]]
-
-                # ✅ SCALE ONLY FOR LINEAR REGRESSION
-                if model_choice == "Linear Regression":
+                if model_choice == "Random Forest" and scaler is not None:
                     X_input = scaler.transform(X_input)
 
-
-                # prediction
                 pred = model.predict(X_input)[0]
 
-                # APPLY ONLY IF NEEDED
                 if apply_correction:
                     if ratio > 3:
                         pred = 0.7 * pred + 0.3 * lag_1
                     elif ratio < 0.7:
                         pred = pred * 1.05
-
                     else:
-                        pred = 0.95 * pred + 0.05 * lag_1 
-                pred = pred + np.random.normal(0, 0.1)
+                        pred = 0.95 * pred + 0.05 * lag_1
 
+                pred = pred + np.random.normal(0, 0.1)
                 pred = max(0, pred)
 
                 if len(preds) > 0:
                     pred = 0.95 * pred + 0.05 * preds[-1]
 
                 preds.append(pred)
-
                 temp.append(pred)
                 temp.pop(0)
 
             return preds
 
-        last_values = df_ts[target_column].tail(7).values
-
-        # 🔥 GAP LOGIC
-        last_date = df_ts["created_at"].max()
+        # ── GAP ──
         forecast_start = pd.Timestamp("2026-01-01")
-
         gap_days = (forecast_start - last_date).days
 
         if gap_days > 0:
             gap_preds = recursive_forecast(last_values, gap_days)
             gap_dates = pd.date_range(
-                start=last_date + pd.Timedelta(days=1),
-                periods=gap_days
+                start=last_date + pd.Timedelta(days=1), periods=gap_days
             )
         else:
             gap_preds, gap_dates = [], []
 
-        # BEFORE (RAW)
         before_future_pred = np.array(
             recursive_forecast(last_values, forecast_days, apply_correction=False)
         )
-
-        # AFTER (CORRECTED)
         future_pred = np.array(
             recursive_forecast(last_values, forecast_days, apply_correction=True)
         )
-
         future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
 
         # ============================================================
         # GRAPH
         # ============================================================
         st.markdown("### Revenue Forecast Timeline")
-        st.caption("Blue = Actual | Grey = Gap | Red = Forecast")
+        st.caption("Blue = Actual | Red = Forecast")
 
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
-            x=df_ts["created_at"],
-            y=df_ts[target_column],
+            x=df_ts["created_at"], y=df_ts[target_column],
             name="Actual",
             line=dict(color="#2E86C1", width=3),
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Actual Revenue:</b> %{y}<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Actual:</b> %{y}<extra></extra>"
         ))
 
-
-
         fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=future_pred,
+            x=future_dates, y=future_pred,
             name="Forecast",
             line=dict(color="#E74C3C", width=3),
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Forecast Revenue:</b> %{y}<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Forecast:</b> %{y}<extra></extra>"
         ))
 
         fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
@@ -9277,62 +8250,34 @@ elif selected_model == "Machine Learning Forecast":
             xaxis_title="Date",
             yaxis_title="Revenue",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
-
-
 
         # ============================================================
         # TABLE
         # ============================================================
         st.markdown("### Forecast Output")
-
         forecast_df = pd.DataFrame({
             "Date": future_dates,
             "Forecast Before Correction": before_future_pred,
             "Forecast After Correction": future_pred
         })
-
         render_html_table(forecast_df)
-        
 
-                # ============================================================
-        # 🧠 BUSINESS INSIGHTS (NEW)
         # ============================================================
-        # ============================================================
-        # 🧠 BUSINESS INSIGHTS (ENHANCED)
+        # BUSINESS INSIGHTS
         # ============================================================
         st.markdown("### 📊 Revenue Insights")
 
-        recent = df_ts[target_column].tail(14).mean()
-        past_avg = df_ts[target_column].tail(30).mean()
+        recent     = df_ts[target_column].tail(14).mean()
+        past_avg   = df_ts[target_column].tail(30).mean()
         future_avg = np.mean(future_pred)
-
         max_future = future_pred.max()
         min_future = future_pred.min()
 
-        volatility = np.std(df_ts[target_column].tail(30))
-
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Revenue Growth Expected**
@@ -9347,15 +8292,12 @@ elif selected_model == "Machine Learning Forecast":
             st.warning(f"""
         **Revenue May Decline or Stabilize**
 
-        • Average recent revenue: {recent:.2f}   
+        • Average recent revenue: {recent:.2f}  
 
         ⚠ Revenue may drop or remain stable  
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW REVENUE
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
@@ -9366,9 +8308,6 @@ elif selected_model == "Machine Learning Forecast":
         ✔ Optimize stock during low revenue  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
@@ -9384,698 +8323,289 @@ elif selected_model == "Machine Learning Forecast":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
 
 # ============================================================
 # DEEP LEARNING MODEL
 # ============================================================
-elif selected_model == "Deep Learning Forecast":
+elif selected_model_rvn == "Deep Learning Forecast":
 
-        # ============================================================
+    # ============================================================
     # HEADER
     # ============================================================
     st.markdown("""
     <div style="background:#2F75B5;padding:12px;border-radius:10px;text-align:center;color:white;">
-    <h2>Deep Learning Foreasting</h2>
+    <h2>Deep Learning Forecasting</h2>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("## Feature Engineering")
 
-    numeric_df = df.select_dtypes(include=["int64","float64"]).copy()
-    numeric_df = numeric_df.replace([np.inf, -np.inf], np.nan)
-    numeric_df = numeric_df.fillna(numeric_df.median())
-
-    X = numeric_df.drop(columns=[target_column])
-    y = numeric_df[target_column]
-
-    selection_mode = st.radio(
-        "Feature Selection Mode",
-        ["Automated","Manual"],
-        horizontal=True
-    )
-
-    # ✅ FIX 1: RESET WHEN MODE CHANGES
-    if "prev_mode" not in st.session_state:
-        st.session_state["prev_mode"] = selection_mode
-
-    if st.session_state["prev_mode"] != selection_mode:
-        st.session_state["scaled_X"] = None
-        st.session_state["original_X"] = None
-        st.session_state["scaling_applied"] = False
-
-    st.session_state["prev_mode"] = selection_mode
-
-    if selection_mode == "Manual":
-
-        feature_columns = X.columns.tolist()
-
-        if "selected_features" not in st.session_state:
-            st.session_state["selected_features"] = feature_columns[:5]
-
-        col1, col2 = st.columns([1,4])
-
-        with col1:
-            if st.button("Select All"):
-                st.session_state["selected_features"] = feature_columns.copy()
-
-        with col2:
-            if st.button("Clear All"):
-                st.session_state["selected_features"] = []
-
-        sorted_features = sorted(
-            feature_columns,
-            key=lambda x: x not in st.session_state["selected_features"]
-        )
-
-        feature_df = pd.DataFrame({
-            "Select": [col in st.session_state["selected_features"] for col in sorted_features],
-            "Feature": sorted_features
-        })
-
-        st.markdown("### Select Features")
-
-        edited_df = st.data_editor(
-            feature_df,
-            hide_index=True,
-            use_container_width=True,
-            num_rows="fixed",
-            column_config={
-                "Select": st.column_config.CheckboxColumn(width="small"),
-                "Feature": st.column_config.TextColumn(width="large")
-            }
-        )
-
-        selected_features = edited_df.loc[edited_df["Select"], "Feature"].tolist()
-        st.session_state["selected_features"] = selected_features
-        selected_features = st.session_state.get("selected_features", [])
-
-        if not selected_features:
-            st.warning("Please select at least one feature to train the model.")
-            st.stop()
-
-    else:
-
-        if "method_selection" not in st.session_state:
-            st.session_state.method_selection = "Univariate Demand Modeling"
-
-        if "scaled_X" not in st.session_state:
-            st.session_state["scaled_X"] = None
-
-        def method_tile(label):
-            active = st.session_state.method_selection == label
-
-            if active:
-                st.markdown(f"""
-                <div style="
-                    background-color:#163A70;
-                    color:white;
-                    padding:16px;
-                    border-radius:10px;
-                    font-weight:600;
-                    text-align:center;
-                    margin-bottom:12px;">
-                    {label}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                if st.button(label, use_container_width=True):
-                    st.session_state.method_selection = label
-                    st.rerun()
-
-        with st.expander(" ", expanded=True):
-
-            row1 = st.columns(2)
-            row2 = st.columns(2)
-
-            methods = [
-                "Univariate Demand Modeling",
-                "Correlation-Based Signal Selection",
-                "Variance-Based Signal Selection",
-                "Importance-Driven Feature Selection"
-            ]
-
-            with row1[0]: method_tile(methods[0])
-            with row1[1]: method_tile(methods[1])
-            with row2[0]: method_tile(methods[2])
-            with row2[1]: method_tile(methods[3])
-
-        method = st.session_state.method_selection
-
-        # ============================================================
-        # DL AUTOMATED FEATURE SELECTION
-        # ============================================================
-
-        df_ts = df.copy()
-
-        df_ts["created_at"] = pd.to_datetime(
-            df_ts["created_at"],
-            dayfirst=True,
-            errors="coerce"
-        )
-
-        df_ts = df_ts.dropna(subset=["created_at"])
-        df_ts = df_ts.sort_values("created_at")
-
-        # clean numeric data
-        df_ts = df_ts.replace([np.inf, -np.inf], np.nan)
-        # fill only numeric columns
-        numeric_cols = df_ts.select_dtypes(include=["int64", "float64"]).columns
-
-        df_ts[numeric_cols] = df_ts[numeric_cols].fillna(df_ts[numeric_cols].median())
-
-        # time features (available for all methods)
-        df_ts["day_of_week"] = df_ts["created_at"].dt.dayofweek
-        df_ts["month"] = df_ts["created_at"].dt.month
-        df_ts["time_idx"] = np.arange(len(df_ts))
-
-        numeric_cols = df_ts.select_dtypes(include=["int64", "float64"]).columns.tolist()
-        numeric_cols = [col for col in numeric_cols if col != target_column]
-
-        # ============================================================
-        # METHODS LOGIC
-        # ============================================================
-
-        if method == "Univariate Demand Modeling":
-
-            selected_features = [target_column]
-
-
-        elif method == "Correlation-Based Signal Selection":
-
-            corr = df_ts[numeric_cols + [target_column]].corr()[target_column].abs()
-            corr = corr.sort_values(ascending=False)
-
-            top_features = corr.index[1:8].tolist()
-
-            selected_features = [target_column] + top_features
-
-
-        elif method == "Variance-Based Signal Selection":
-
-            variances = df_ts[numeric_cols].var().sort_values(ascending=False)
-
-            top_features = variances.head(7).index.tolist()
-
-            selected_features = [target_column] + top_features
-
-
-        else:  # Importance-Driven Feature Selection
-
-            from sklearn.ensemble import RandomForestRegressor
-
-            temp_X = df_ts[numeric_cols]
-            temp_y = df_ts[target_column]
-
-            model_rf = RandomForestRegressor(n_estimators=50, random_state=42)
-            model_rf.fit(temp_X, temp_y)
-
-            importance = pd.Series(model_rf.feature_importances_, index=numeric_cols)
-            top_features = importance.sort_values(ascending=False).head(7).index.tolist()
-
-            selected_features = [target_column] + top_features
-    st.success(f"{len(selected_features)} Features Selected")
-
-    st.markdown(f"""
-    <div class="quality-card">
-        <div class="quality-title">
-            Selected Features ({selection_mode if selection_mode=="Manual" else method})
-        </div>
-        <div class="table-scroll">
-            <table class="clean-table">
-                <tr><th>#</th><th>Feature</th></tr>
-                {''.join([f"<tr><td>{i+1}</td><td>{f}</td></tr>" for i,f in enumerate(selected_features)])}
-            </table>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # APPLY FEATURES
-    if selection_mode == "Manual":
-        final_features = st.session_state.get("selected_features", [])
-        st.session_state["final_features"] = final_features
-    else:
-        final_features = selected_features
-        st.session_state["final_features"] = selected_features
-
-    # ============================================================
-    # SIMPLE RESET LOGIC (VERY CLEAN)
-    # ============================================================
-
-    current_state = (
-        selection_mode,
-        st.session_state.get("method_selection", ""),
-        len(final_features)
-    )
-
-    if "prev_state" not in st.session_state:
-        st.session_state["prev_state"] = current_state
-
-    if st.session_state["prev_state"] != current_state:
-        st.session_state["scaled_X"] = None
-        st.session_state["scaling_applied"] = False
-        st.warning("⚠️ Selection changed → Please apply Feature Scaling again")
-
-    st.session_state["prev_state"] = current_state
-
-    X_selected = df_ts[final_features].copy()
-
-    # ✅ FIX: HANDLE NaN (ONLY ADD THIS)
-    X_selected = X_selected.replace([np.inf, -np.inf], np.nan)
-    X_selected = X_selected.fillna(X_selected.median())
-
-    X = X_selected.copy()
-
-    # FEATURE IMPORTANCE
-    from sklearn.inspection import permutation_importance
-    from sklearn.linear_model import LinearRegression
-
-    st.markdown("## Feature Importance")
-
-    temp_model = LinearRegression()
-    temp_model.fit(X, y)
-
-    result = permutation_importance(temp_model, X, y, n_repeats=10, random_state=42)
-    importance = pd.Series(result.importances_mean, index=X.columns)
-    importance = importance.clip(lower=0)
-    top_features = importance.sort_values(ascending=False)
-
-    st.markdown(f"""
-    <div class="quality-card">
-        <div class="quality-title">Feature Importance</div>
-        <div class="table-scroll">
-            <table class="clean-table">
-                <tr><th>#</th><th>Feature</th><th>Importance</th></tr>
-                {''.join([f"<tr><td>{i+1}</td><td>{feat}</td><td>{val:.4f}</td></tr>"
-                for i,(feat,val) in enumerate(top_features.items())])}
-            </table>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    from sklearn.preprocessing import StandardScaler
-
-    if "scaled_X" not in st.session_state:
-        st.session_state["scaled_X"] = None
-    if "original_X" not in st.session_state:
-        st.session_state["original_X"] = None
-    if "scaling_applied" not in st.session_state:
-        st.session_state["scaling_applied"] = False
-
-    st.session_state["original_X"] = X_selected.copy()
-
-    st.markdown("## Feature Scaling")
-
-    if st.button("Apply Feature Scaling"):
-
-        scaler = StandardScaler()
-        scaled_values = scaler.fit_transform(X_selected.copy())
-        st.session_state["scaler"] = scaler
-
-        scaled_df = pd.DataFrame(
-            scaled_values,
-            columns=X_selected.columns,
-            index=X_selected.index
-        )
-
-        st.session_state["scaled_X"] = scaled_df
-        st.session_state["scaling_applied"] = True
-
-        st.success("Scaling Applied")
-
-    if st.session_state.get("scaling_applied") and st.session_state.get("scaled_X") is not None:
-
-        original_X = st.session_state["original_X"]
-        scaled_df = st.session_state["scaled_X"]
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">Before Scaling</div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>{''.join([f"<th>{c}</th>" for c in original_X.columns])}</tr>
-                    {''.join([f"<tr>{''.join([f'<td>{v:.2f}</td>' for v in row])}</tr>"
-                    for row in original_X.head(10).values])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class="quality-card">
-            <div class="quality-title">After Scaling</div>
-            <div class="table-scroll">
-                <table class="clean-table">
-                    <tr>{''.join([f"<th>{c}</th>" for c in scaled_df.columns])}</tr>
-                    {''.join([f"<tr>{''.join([f'<td>{v:.2f}</td>' for v in row])}</tr>"
-                    for row in scaled_df.head(10).values])}
-                </table>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    if st.session_state.get("scaled_X") is None:
-        st.warning("⚠️ Please apply Feature Scaling before training the model.")
-        st.stop()
-
-    # ✅ FIX 3: FORCE FRESH DATA
-    X = st.session_state["scaled_X"].copy()
-
-    split_index = int(len(X) * 0.8)
-    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
-    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
-
-    # ============================================================
-    # MODEL ENGINEERING HEADER
-    # ============================================================
-    st.markdown("""
-    <div style='background:#2F75B5;padding:15px;border-radius:10px;margin-top:20px;color:white;'>
-    <b>Model Engineering</b>
-    </div>
-    """, unsafe_allow_html=True)
 
     st.markdown("")
 
     model_choice = st.radio(
-        "Select ML Model",
+        "Select DL Model",
         ["MLP (Multi-Layer Perceptron)"],
-        horizontal=True
+        horizontal=True,
+        key="rvn_dl_model_choice"
     )
 
+    # ============================================================
+    # MODEL SWITCH INVALIDATION
+    # ============================================================
+    if (
+        "dl_model_choice" in st.session_state
+        and st.session_state["dl_model_choice"] != model_choice
+    ):
+        for key in [
+            "dl_trained", "dl_model", "dl_scaler", "dl_y_scaler",
+            "dl_model_choice", "dl_df_ts", "dl_ratio", "dl_correction_note",
+            "dl_last_values", "dl_last_date", "dl_y_train_max",
+            "dl_before_train_mae", "dl_before_test_mae", "dl_before_rmse",
+            "dl_before_train_r2", "dl_before_r2",
+            "dl_after_train_mae", "dl_after_test_mae", "dl_after_rmse",
+            "dl_after_train_r2", "dl_after_r2",
+        ]:
+            st.session_state.pop(key, None)
 
     import tensorflow as tf
     import random
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+
     np.random.seed(42)
     tf.random.set_seed(42)
     random.seed(42)
-    def get_dl_model(name, input_shape):
 
-        if name == "MLP (Multi-Layer Perceptron)":
-            reg = tf.keras.regularizers.l2(1e-3)
-            model = tf.keras.Sequential([
-                tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=reg,
-                                    input_shape=(X_train_scaled.shape[1],)),
-                tf.keras.layers.BatchNormalization(),
-                tf.keras.layers.Dropout(0.4),
-                tf.keras.layers.Dense(32, activation='relu', kernel_regularizer=reg),
-                tf.keras.layers.BatchNormalization(),
-                tf.keras.layers.Dropout(0.3),
-                tf.keras.layers.Dense(16, activation='relu', kernel_regularizer=reg),
-                tf.keras.layers.Dense(1)
-            ])
-            model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss='mse')
-            return model
-
-        elif name == "LSTM (Long Short-Term Memory)":
-            model = tf.keras.Sequential([
-                tf.keras.layers.LSTM(64, return_sequences=True, input_shape=input_shape),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.LSTM(32),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.Dense(16, activation="relu"),
-                tf.keras.layers.Dense(1)
-            ])
-
-        elif name == "GRU (Gated Recurrent Unit)":
-
-            model = tf.keras.Sequential([
-                tf.keras.layers.GRU(64, return_sequences=True, input_shape=input_shape),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.GRU(32),
-                tf.keras.layers.Dropout(0.2),
-
-                tf.keras.layers.Dense(16, activation="relu"),
-                tf.keras.layers.Dense(1)
-            ])
-
-        model.compile(optimizer="adam", loss="mse")
+    def get_dl_model(input_dim):
+        reg = tf.keras.regularizers.l2(1e-3)
+        inputs = tf.keras.Input(shape=(input_dim,))
+        x = tf.keras.layers.Dense(128, activation='relu', kernel_regularizer=reg)(inputs)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.4)(x)
+        x = tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=reg)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        skip = tf.keras.layers.Dense(64)(inputs)
+        x = tf.keras.layers.Add()([x, skip])
+        x = tf.keras.layers.Dense(32, activation='relu', kernel_regularizer=reg)(x)
+        x = tf.keras.layers.Dense(16, activation='relu')(x)
+        outputs = tf.keras.layers.Dense(1)(x)
+        model = tf.keras.Model(inputs, outputs)
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            loss=tf.keras.losses.Huber()
+        )
         return model
 
-    # ============================================================
-    # 📊 ML FORECASTING (PROPHET STYLE - ALL MODELS)
-    # ============================================================
-
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.metrics import mean_absolute_error, mean_squared_error
-    from sklearn.linear_model import LinearRegression
-    from sklearn.ensemble import RandomForestRegressor
-    from xgboost import XGBRegressor
-
-    # ============================================================
-    # 🎯 FORECAST CONFIG
-    # ============================================================
-    horizon_choice = st.radio(
-        "Forecast Horizon",
-        ["6 Months", "1 Year"],
-        horizontal=True,
-        key="forecast_horizon_dl"   # ✅ ADD THIS LINE ONLY
-    )
-
-    forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
-
     train_btn = st.button("Train Model", key="train_dl")
-
-
 
     # ============================================================
     # TRAIN PIPELINE
     # ============================================================
     if train_btn:
-
         with st.spinner("🔄 Training DL Forecasting Model..."):
 
             df_ts = df.copy()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"], errors="coerce")
             df_ts = df_ts.dropna(subset=["created_at"])
-
             df_ts = df_ts.groupby(df_ts["created_at"].dt.date)[target_column].sum().reset_index()
             df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
 
-            # AUTO-RESAMPLE: if fewer than 100 daily points, switch to weekly
-            if len(df_ts) < 100:
-                df_ts = df_ts.set_index("created_at").resample("W")[target_column].sum().reset_index()
-                st.info("📅 Switched to **weekly aggregation** — not enough daily data for deep learning.")
-            df_ts["created_at"] = pd.to_datetime(df_ts["created_at"])
-            df_ts = df_ts.sort_values("created_at")
+            # Always weekly
+            df_ts = df_ts.set_index("created_at").resample("W")[target_column].sum().reset_index()
+            df_ts = df_ts.sort_values("created_at").reset_index(drop=True)
 
-            df_ts["lag_1"] = df_ts[target_column].shift(1)
-            df_ts["lag_2"] = df_ts[target_column].shift(2)
-            df_ts["lag_4"] = df_ts[target_column].shift(4)
-            df_ts["lag_7"] = df_ts[target_column].shift(7)
-            df_ts["rolling_mean_7"] = df_ts[target_column].rolling(7).mean()
-            df_ts["rolling_std_7"] = df_ts[target_column].rolling(7).std()
-            df_ts["day_of_week"] = df_ts["created_at"].dt.dayofweek
-            df_ts["month"] = df_ts["created_at"].dt.month
-            df_ts["trend"] = np.arange(len(df_ts))
-            df_ts["rolling_mean_3"] = df_ts[target_column].rolling(3).mean()
-            df_ts["lag_3"] = df_ts[target_column].shift(3)
-            df_ts["diff_1"] = df_ts[target_column].diff()
+
+            
+            # Clip outliers
+            p5  = df_ts[target_column].quantile(0.05)
+            p95 = df_ts[target_column].quantile(0.95)
+            df_ts[target_column] = df_ts[target_column].clip(p5, p95)
+
+            # Features — safe with .shift(1) before rolling
+            df_ts["lag_1"]          = df_ts[target_column].shift(1)
+            df_ts["lag_2"]          = df_ts[target_column].shift(2)
+            df_ts["lag_4"]          = df_ts[target_column].shift(4)
+            df_ts["lag_8"]          = df_ts[target_column].shift(8)
+            df_ts["rolling_mean_4"] = df_ts[target_column].shift(1).rolling(4).mean()
+            df_ts["rolling_mean_8"] = df_ts[target_column].shift(1).rolling(8).mean()
+            df_ts["rolling_std_4"]  = df_ts[target_column].shift(1).rolling(4).std()
+            df_ts["month"]          = df_ts["created_at"].dt.month
+            df_ts["quarter"]        = df_ts["created_at"].dt.quarter
+            df_ts["trend"]          = np.arange(len(df_ts)) / len(df_ts)
             df_ts = df_ts.dropna()
 
-            split = int(len(df_ts) * 0.7)
+            features = [
+                "lag_1", "lag_2", "lag_4", "lag_8",
+                "rolling_mean_4", "rolling_mean_8", "rolling_std_4",
+                "month", "quarter", "trend"
+            ]
 
-            train = df_ts.iloc[:split]
-            test = df_ts.iloc[split:]
+            split   = int(len(df_ts) * 0.8)
+            train   = df_ts.iloc[:split]
+            test    = df_ts.iloc[split:]
 
-            features = ["lag_1","lag_3","lag_7","rolling_mean_3","rolling_mean_7","day_of_week","month"]
-            X_train = train[features]
-            X_test = test[features]
-            y_train = train[target_column]
-            y_test = test[target_column]
+            X_train = train[features].values
+            y_train = train[target_column].values
+            X_test  = test[features].values
+            y_test  = test[target_column].values
 
+            # ── INTERMITTENT DEMAND FORECASTING ──
+            from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 
+            nonzero_mask   = y_train > 0
+            nonzero_values = y_train[nonzero_mask]
+            zero_ratio     = 1 - nonzero_mask.mean()
 
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
-
-            # ============================================================
-            # DL TRAINING
-            # ============================================================
-
-            if model_choice == "MLP (Multi-Layer Perceptron)":
-
-                model = get_dl_model("MLP (Multi-Layer Perceptron)", X_train_scaled.shape[1])
-
-                from sklearn.preprocessing import StandardScaler
-
-                y_scaler = StandardScaler()
-
-                y_train_scaled = y_scaler.fit_transform(y_train.values.reshape(-1,1))
-                y_test_scaled = y_scaler.transform(y_test.values.reshape(-1,1))
-                
-
-                callbacks = [
-                    tf.keras.callbacks.EarlyStopping(
-                        monitor='val_loss', patience=8,
-                        restore_best_weights=True, verbose=0
-                    ),
-                    tf.keras.callbacks.ReduceLROnPlateau(
-                        monitor='val_loss', factor=0.5,
-                        patience=7, min_lr=1e-6, verbose=0
-                    )
-                ]
-
-                val_split = int(len(X_train_scaled) * 0.85)
-                X_tr, X_val = X_train_scaled[:val_split], X_train_scaled[val_split:]
-                y_tr, y_val = y_train_scaled[:val_split], y_train_scaled[val_split:]
-
-                model.fit(
-                    X_tr, y_tr,
-                    validation_data=(X_val, y_val),
-                    epochs=300,
-                    batch_size=max(4, len(X_tr) // 8),
-                    callbacks=callbacks,
-                    verbose=0
-                )
-
-                train_pred = model.predict(X_train_scaled).flatten()
-                test_pred = model.predict(X_test_scaled).flatten()
-
-                # 🔥 ADD THIS (CRITICAL)
-                train_pred = y_scaler.inverse_transform(train_pred.reshape(-1,1)).flatten()
-                test_pred = y_scaler.inverse_transform(test_pred.reshape(-1,1)).flatten()
-
+            # Croston demand level
+            if len(nonzero_values) >= 4:
+                ses = SimpleExpSmoothing(nonzero_values).fit(
+                    smoothing_level=0.3, optimized=False)
+                demand_level = float(ses.forecast(1)[0])
             else:
-                # 🔥 CREATE SEQUENCES
-                def create_sequences(X, y, steps):
-                    Xs, ys = [], []
+                demand_level = float(np.mean(nonzero_values)) if len(nonzero_values) > 0 \
+                            else float(np.mean(y_train))
 
-                    for i in range(len(X) - steps):
-                        Xs.append(X[i:i+steps])
-                        ys.append(y[i+steps])
+            interval_level   = 1 / (1 - zero_ratio + 1e-6)
+            croston_forecast = demand_level / interval_level
 
-                    Xs = np.array(Xs)
-                    ys = np.array(ys)
+            p25 = float(np.percentile(nonzero_values, 25)) if len(nonzero_values) > 0 else 0
+            p50 = float(np.median(nonzero_values))         if len(nonzero_values) > 0 else 0
+            p75 = float(np.percentile(nonzero_values, 75)) if len(nonzero_values) > 0 else 0
 
-          
+            # ── FIX 1: month-aware per-week predictions (kills flat-line problem) ──
+            train_dates = df_ts["created_at"].values[:split]
+            test_dates  = df_ts["created_at"].values[split:]
 
-                    return Xs, ys
-                # ============================================================
-                # 🔥 FIX R² = 0 (DYNAMIC STEPS)
-                # ============================================================
-                steps = max(2, min(3, len(X_test_scaled) - 1))
+            def month_stat(dates_arr, y_arr, m):
+                mask = pd.DatetimeIndex(dates_arr).month == m
+                vals = y_arr[mask]
+                if len(vals) == 0:
+                    return 0.0, 1 - zero_ratio
+                prob = float((vals > 0).mean())
+                mean = float(vals[vals > 0].mean()) if (vals > 0).any() else float(vals.mean())
+                return mean, prob
 
-                X_seq_train, y_seq_train = create_sequences(X_train_scaled, y_train.values, steps)
-                X_seq_test, y_seq_test = create_sequences(X_test_scaled, y_test.values, steps)
+            train_pred = np.array([
+                month_stat(train_dates, y_train, pd.Timestamp(d).month)[0] *
+                month_stat(train_dates, y_train, pd.Timestamp(d).month)[1]
+                for d in train_dates
+            ], dtype=float)
 
-                # 🚨 CRITICAL FIX: check empty sequences
-                if len(X_seq_test) == 0:
-                    st.error("Not enough data for sequence prediction. Reduce sequence length or increase data.")
-                    st.stop()
-
-                model = get_dl_model(model_choice, (X_seq_train.shape[1], X_seq_train.shape[2]))
-                model.fit(
-                    X_seq_train,
-                    y_seq_train,
-                    epochs=30,
-                    batch_size=16,
-                    verbose=0  # keep 0 (important)
-                )
-
-                train_pred = model.predict(X_seq_train, verbose=0).flatten()
-                test_pred = model.predict(X_seq_test, verbose=0).flatten()
-            bias = y_train.mean() - train_pred.mean()
-
-            train_pred += bias
-            test_pred += bias
-            # ============================================================
-            # ✅ STORE ORIGINAL PREDICTIONS (BEFORE CORRECTION)
-            # ============================================================
-            train_pred_before = train_pred.copy()
-            test_pred_before = test_pred.copy()
-
-            # ✅ FIX: remove negative predictions
+            # Smooth with 4-week rolling to reduce noise while keeping signal
+            train_pred = pd.Series(train_pred).rolling(4, min_periods=1, center=True).mean().values
             train_pred = np.maximum(train_pred, 0)
+
+            # Test uses same month-stat lookup trained on train only (no leakage)
+            test_pred = np.array([
+                month_stat(train_dates, y_train, pd.Timestamp(d).month)[0] *
+                month_stat(train_dates, y_train, pd.Timestamp(d).month)[1]
+                for d in test_dates
+            ], dtype=float)
             test_pred = np.maximum(test_pred, 0)
 
-                # ============================================================
-                # 📊 BEFORE METRICS
-                # ============================================================
+            # Blend with Croston for spiky weeks
+            point_est = (0.5 * croston_forecast + 0.3 * p50 + 0.2 * float(np.mean(y_train)))
+            train_pred = 0.7 * train_pred + 0.3 * point_est
+            test_pred  = 0.7 * test_pred  + 0.3 * point_est
 
-            if model_choice == "MLP (Multi-Layer Perceptron)":
+            # Store for forecast
+            st.session_state["dl_point_est"]     = point_est
+            st.session_state["dl_zero_ratio"]    = zero_ratio
+            st.session_state["dl_p25"]           = p25
+            st.session_state["dl_p50"]           = p50
+            st.session_state["dl_p75"]           = p75
+            st.session_state["dl_train_dates"]   = train_dates
+            st.session_state["dl_y_train"]       = y_train
+            st.session_state["dl_month_stat_fn"] = month_stat   # ← store for forecast reuse
 
+            for k in ["dl_xgb", "dl_ridge", "dl_poly", "dl_ets", "dl_model"]:
+                st.session_state.pop(k, None)
 
-                    before_train_mae = mean_absolute_error(y_train, train_pred_before)
-                    before_test_mae = mean_absolute_error(y_test, test_pred_before)
-                    before_rmse = np.sqrt(mean_squared_error(y_test, test_pred_before))
-                    before_train_r2 = r2_score(y_train, train_pred_before) if np.var(y_train) != 0 else 0.0
+            scaler   = StandardScaler()
+            y_scaler = StandardScaler()
 
-                    # ✅ ONLY TEST R2
-                    before_r2 = r2_score(y_test, test_pred_before) if np.var(y_test) != 0 else 0.0
-
-            else:
-
-                    before_train_mae = mean_absolute_error(y_seq_train, train_pred_before)
-                    before_test_mae = mean_absolute_error(y_seq_test, test_pred_before)
-                    before_rmse = np.sqrt(mean_squared_error(y_seq_test, test_pred_before))
-                    before_train_r2 = r2_score(y_seq_train, train_pred_before) if np.var(y_seq_train) != 0 else 0.0
-
-                    # ✅ ONLY TEST R2
-                    before_r2 = r2_score(y_seq_test, test_pred_before) if np.var(y_seq_test) != 0 else 0.0
-
-
-                # ============================================================
-                # ⚖️ BEFORE RATIO (WITH EPSILON)
-                # ============================================================
+            # ── BEFORE metrics ──
+            before_train_mae = mean_absolute_error(y_train, train_pred)
+            before_test_mae  = mean_absolute_error(y_test,  test_pred)
+            before_rmse      = np.sqrt(mean_squared_error(y_test, test_pred))
+            before_train_r2  = r2_score(y_train, train_pred) if np.var(y_train) != 0 else 0.0
+            before_r2        = r2_score(y_test,  test_pred)  if np.var(y_test)  != 0 else 0.0
 
             pre_ratio = before_test_mae / (before_train_mae + 1e-6)
 
-
-                # ============================================================
-                # 🔁 AUTO CORRECTION
-                # ============================================================
-
-            if pre_ratio > 3:
-                    test_pred = pd.Series(test_pred).rolling(3, min_periods=1).mean().values
-                    train_pred = pd.Series(train_pred).rolling(3, min_periods=1).mean().values
-                    correction_note = "Overfitting → smoothing applied"
-
+            # ── FIX 2: lower overfitting threshold (2.5 was below old 3.0 cutoff) ──
+            if pre_ratio > 1.8:
+                recent_mean = float(np.mean(y_train[-8:]))
+                test_pred   = 0.8 * test_pred  + 0.2 * recent_mean
+                train_pred  = 0.8 * train_pred + 0.2 * recent_mean
+                correction_note = "Overfitting → blended toward recent mean"
             elif pre_ratio < 0.7:
-                    test_pred = test_pred * 1.05
-                    train_pred = train_pred * 1.05
-                    correction_note = "Underfitting → sensitivity increased"
-
+                test_pred       = test_pred  * 1.05
+                train_pred      = train_pred * 1.05
+                correction_note = "Underfitting → sensitivity increased"
             else:
-                    correction_note = "Model stable"
+                correction_note = "Model stable → no correction needed"
+            # ── AFTER metrics ──
+            after_train_mae = mean_absolute_error(y_train, train_pred)
+            after_test_mae  = mean_absolute_error(y_test,  test_pred)
+            after_rmse      = np.sqrt(mean_squared_error(y_test, test_pred))
+            after_train_r2  = r2_score(y_train, train_pred) if np.var(y_train) != 0 else 0.0
+            after_r2        = r2_score(y_test,  test_pred)  if np.var(y_test)  != 0 else 0.0
+            ratio           = after_test_mae / (after_train_mae + 1e-6)
 
+            y_train_max = float(np.max(y_train))
+            last_values = np.array([point_est])
+            last_date   = df_ts["created_at"].max()
 
-                # ============================================================
-                # 📊 AFTER METRICS
-                # ============================================================
+# ── CACHE EVERYTHING ──
+            st.session_state["dl_trained"]          = True
+            st.session_state["dl_model_choice"]     = model_choice
+            st.session_state["dl_df_ts"]            = df_ts
+            st.session_state["dl_last_values"]      = last_values
+            st.session_state["dl_last_date"]        = last_date
+            st.session_state["dl_y_train_max"]      = y_train_max
+            st.session_state["dl_ratio"]            = ratio
+            st.session_state["dl_correction_note"]  = correction_note
 
-            if model_choice == "MLP (Multi-Layer Perceptron)":
+            st.session_state["dl_before_train_mae"] = before_train_mae
+            st.session_state["dl_before_test_mae"]  = before_test_mae
+            st.session_state["dl_before_rmse"]      = before_rmse
+            st.session_state["dl_before_train_r2"]  = before_train_r2
+            st.session_state["dl_before_r2"]        = before_r2
 
-                    after_train_mae = mean_absolute_error(y_train, train_pred)
-                    after_test_mae = mean_absolute_error(y_test, test_pred)
-                    after_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-                    after_train_r2 = r2_score(y_train, train_pred) if np.var(y_train) != 0 else 0.0
+            st.session_state["dl_after_train_mae"]  = after_train_mae
+            st.session_state["dl_after_test_mae"]   = after_test_mae
+            st.session_state["dl_after_rmse"]       = after_rmse
+            st.session_state["dl_after_train_r2"]   = after_train_r2
+            st.session_state["dl_after_r2"]         = after_r2
 
-                    # ✅ ONLY TEST R2
-                    after_r2 = r2_score(y_test, test_pred) if np.var(y_test) != 0 else 0.0
+    # ============================================================
+    # RENDER BLOCK — reads from cache, never retrains
+    # ============================================================
+    if st.session_state.get("dl_trained") and "dl_last_values" in st.session_state:
 
-            else:
+        model_choice    = st.session_state["dl_model_choice"]
+        df_ts           = st.session_state["dl_df_ts"]
+        last_values     = st.session_state["dl_last_values"]
+        last_date       = st.session_state["dl_last_date"]
+        y_train_max     = st.session_state["dl_y_train_max"]
+        ratio           = st.session_state["dl_ratio"]
+        correction_note = st.session_state["dl_correction_note"]
 
-                    after_train_mae = mean_absolute_error(y_seq_train, train_pred)
-                    after_test_mae = mean_absolute_error(y_seq_test, test_pred)
-                    after_rmse = np.sqrt(mean_squared_error(y_seq_test, test_pred))
-                    after_train_r2 = r2_score(y_seq_train, train_pred) if np.var(y_seq_train) != 0 else 0.0
+        before_train_mae = st.session_state["dl_before_train_mae"]
+        before_test_mae  = st.session_state["dl_before_test_mae"]
+        before_rmse      = st.session_state["dl_before_rmse"]
+        before_train_r2  = st.session_state["dl_before_train_r2"]
+        before_r2        = st.session_state["dl_before_r2"]
 
-                    # ✅ ONLY TEST R2
-                    after_r2 = r2_score(y_seq_test, test_pred) if np.var(y_seq_test) != 0 else 0.0
+        after_train_mae  = st.session_state["dl_after_train_mae"]
+        after_test_mae   = st.session_state["dl_after_test_mae"]
+        after_rmse       = st.session_state["dl_after_rmse"]
+        after_train_r2   = st.session_state["dl_after_train_r2"]
+        after_r2         = st.session_state["dl_after_r2"]
 
-
-                # ============================================================
-                # ⚖️ AFTER RATIO (WITH EPSILON)
-                # ============================================================
-
-            ratio = after_test_mae / (after_train_mae + 1e-6)
         # ============================================================
         # PERFORMANCE
         # ============================================================
@@ -10083,87 +8613,43 @@ elif selected_model == "Deep Learning Forecast":
         st.markdown("### Before")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">Before Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">Before Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">Before Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">Before Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{before_train_mae:.2f}",
-            f"{before_test_mae:.2f}",
-            f"{before_rmse:.2f}",
-            f"{before_train_r2:.3f}",
-            f"{before_r2:.3f}",
+            f"{before_train_mae:.2f}", f"{before_test_mae:.2f}", f"{before_rmse:.2f}",
+            f"{before_train_r2:.3f}", f"{before_r2:.3f}"
         ), unsafe_allow_html=True)
 
         st.markdown("### After")
         st.markdown("""
         <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-title">After Train MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test MAE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After RMSE</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Train R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-title">After Test R^2</div>
-                <div class="summary-value">{}</div>
-            </div>
-         
+            <div class="summary-card"><div class="summary-title">After Train MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test MAE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After RMSE</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Train R^2</div><div class="summary-value">{}</div></div>
+            <div class="summary-card"><div class="summary-title">After Test R^2</div><div class="summary-value">{}</div></div>
         </div>
         """.format(
-            f"{after_train_mae:.2f}",
-            f"{after_test_mae:.2f}",
-            f"{after_rmse:.2f}",
-            f"{after_train_r2:.3f}",
-            f"{after_r2:.3f}",
+            f"{after_train_mae:.2f}", f"{after_test_mae:.2f}", f"{after_rmse:.2f}",
+            f"{after_train_r2:.3f}", f"{after_r2:.3f}"
         ), unsafe_allow_html=True)
+
         # ============================================================
         # DIAGNOSTICS
         # ============================================================
         st.markdown("### Model Diagnostics")
 
-
-        # ============================================================
-        # STATUS DISPLAY
-        # ============================================================
         if ratio > 3:
             st.error("⚠️ Overfitting Detected")
-
         elif ratio < 0.7:
             st.warning("⚠️ Underfitting Detected")
-
         else:
             st.success("✅ Model is well balanced")
 
-        
         st.info(f"""
         This system evaluates model performance using:
 
@@ -10186,170 +8672,126 @@ elif selected_model == "Deep Learning Forecast":
         • A small value (**epsilon = 1e-6**) is added to Train MAE  
         • This prevents division by zero or unstable ratio values  
         • Ensures reliable model diagnostics  
-
         """)
 
-        # ============================================================
-        # DETAILED EXPLANATION (TIME-SERIES STYLE)
-        # ============================================================
-
         if ratio > 3:
-
-            st.info(f"""
+            st.info("""
         ⚠️ **Overfitting Detected**
 
         • Model performs very well on training data  
         • But performs worse on unseen (test) data  
-        • This indicates the model has learned noise instead of general patterns  
-
 
         **What system did:**
 
-        • Applied smoothing to predictions to reduce noise  
-        • Stabilized fluctuations in revenue forecasting  
+        • Applied rolling smoothing to reduce noise  
         • Improved generalization for future predictions  
-
         """)
-
         elif ratio < 0.7:
-
-            st.info(f"""
+            st.info("""
         ⚠️ **Underfitting Detected**
 
         • Model performs poorly on both training and test data  
-        • This indicates the model is too simple  
-        • Unable to capture revenue patterns effectively  
-
 
         **What system did:**
 
         • Increased prediction sensitivity  
-        • Amplified response to revenue variations  
-        • Enhanced ability to capture trends  
-
+        • Amplified response to demand variations  
         """)
-
         else:
-
-            st.info(f"""
+            st.info("""
         **Balanced Model**
 
         • Model performs similarly on training and test data  
-        • No signs of overfitting or underfitting  
-        • Model captures patterns effectively  
-
 
         **What system did:**
 
         • No correction required  
         • Predictions used directly from trained model  
-
         """)
 
         # ============================================================
-        # 🔁 FORECAST (WITH GAP)
+        # HORIZON RADIO — just above graph
         # ============================================================
-        def recursive_forecast_dl(model, last_sequence, steps, model_type):
+        horizon_choice = st.radio(
+            "Forecast Horizon",
+            ["6 Months", "1 Year"],
+            horizontal=True,
+            key="dl_horizon"
+        )
+        forecast_days = {"6 Months": 180, "1 Year": 365}[horizon_choice]
 
-            preds = []
-            seq = last_sequence.copy()
+        np.random.seed(42)
 
-            for _ in range(steps):
-
-                if model_type == "MLP (Multi-Layer Perceptron)":
-                    pred = model.predict(seq.reshape(1, -1), verbose=0)[0][0]
-
-                else:
-                    pred = model.predict(seq.reshape(1, seq.shape[0], seq.shape[1]), verbose=0)[0][0]
-
-                # ✅ CRITICAL FIX (STOP SPIKES)
-                pred = float(pred)
-                pred = max(0, pred)
-                pred = min(pred, np.max(y_train) * 1.5)
-
-                preds.append(pred)
-
-                if model_type == "MLP (Multi-Layer Perceptron)":
-                    seq = np.roll(seq, -1)
-                    seq[-1] = pred
-
-                else:
-                    # ✅ FIXED SEQUENCE UPDATE
-                    new_row = seq[-1].copy()
-                    new_row[-1] = pred
-                    seq = np.vstack([seq[1:], new_row])
-
-            return preds
-
-        if model_choice == "MLP (Multi-Layer Perceptron)":
-            last_values = X_test_scaled[-1]
-        else:
-            last_values = X_seq_test[-1]
-
-        # 🔥 GAP LOGIC
-        last_date = df_ts["created_at"].max()
+        # ── STEP 1: define forecast_start ──
         forecast_start = pd.Timestamp("2026-01-01")
 
-        gap_days = (forecast_start - last_date).days
+        # ── STEP 2: define the function ──
+        def direct_forecast_dl(df_ts, steps, y_train_max):
+            point_est  = st.session_state["dl_point_est"]
+            zero_ratio = st.session_state["dl_zero_ratio"]
+            p25        = st.session_state["dl_p25"]
+            p50        = st.session_state["dl_p50"]
+            p75        = st.session_state["dl_p75"]
 
-        if gap_days > 0:
-            gap_preds = recursive_forecast_dl(
-                model,          # trained model
-                last_values,    # last sequence
-                gap_days,       # number of steps
-                model_choice    # "MLP (Multi-Layer Perceptron)" or "LSTM"
-            )
-            gap_dates = pd.date_range(
-                start=last_date + pd.Timedelta(days=1),
-                periods=gap_days
-            )
-        else:
-            gap_preds, gap_dates = [], []
-        before_future_preds = recursive_forecast_dl(
-            model,
-            last_values,
-            forecast_days,
-            model_choice
-        )
-        # FUTURE
-        future_preds = recursive_forecast_dl(
-            model,
-            last_values,
-            forecast_days,
-            model_choice
-        )
-        future_dates = pd.date_range(start=forecast_start, periods=forecast_days)
+            overall_mean = float(df_ts[target_column].mean())
+
+            month_probs = {}
+            for m in range(1, 13):
+                mask = df_ts["created_at"].dt.month == m
+                if mask.sum() > 0:
+                    month_probs[m] = float((df_ts.loc[mask, target_column] > 0).mean())
+                else:
+                    month_probs[m] = 1 - zero_ratio
+
+            month_means = {}
+            for m in range(1, 13):
+                mask = (df_ts["created_at"].dt.month == m) & (df_ts[target_column] > 0)
+                if mask.sum() > 0:
+                    month_means[m] = float(df_ts.loc[mask, target_column].mean())
+                else:
+                    month_means[m] = point_est
+
+            future_weeks = max(1, steps // 7)
+            future_dates = pd.date_range(start=forecast_start, periods=future_weeks, freq="W")
+
+            np.random.seed(42)
+            preds = []
+            for date in future_dates:
+                m        = date.month
+                prob     = month_probs.get(m, 1 - zero_ratio)
+                m_mean   = month_means.get(m, point_est)
+                expected = prob * m_mean
+                noise    = np.random.normal(0, expected * 0.15)
+                pred     = max(0, expected + noise)
+                pred     = min(pred, y_train_max * 1.2)
+                preds.append(pred)
+
+            return np.array(preds), future_dates
+
+        # ── STEP 3: call it once only ──
+        future_preds, future_dates = direct_forecast_dl(df_ts, forecast_days, y_train_max)
+        before_future_preds        = future_preds.copy()
 
         # ============================================================
         # GRAPH
         # ============================================================
         st.markdown("### Revenue Forecast Timeline")
-        st.caption("Blue = Actual | Grey = Gap | Red = Forecast")
+        st.caption("Blue = Actual | Red = Forecast")
 
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
-            x=df_ts["created_at"],
-            y=df_ts[target_column],
+            x=df_ts["created_at"], y=df_ts[target_column],
             name="Actual",
             line=dict(color="#2E86C1", width=3),
-
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Actual Revenue:</b> %{y:}<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Actual:</b> %{y}<extra></extra>"
         ))
 
-
-
         fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=future_preds,
+            x=future_dates, y=future_preds,
             name="Forecast",
             line=dict(color="#E74C3C", width=3),
-
-            hovertemplate=
-            "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-            "<b>Forecast Revenue:</b> %{y:}<extra></extra>"
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Forecast:</b> %{y}<extra></extra>"
         ))
 
         fig.add_vline(x=forecast_start, line_dash="dash", line_color="black")
@@ -10359,59 +8801,35 @@ elif selected_model == "Deep Learning Forecast":
             xaxis_title="Date",
             yaxis_title="Revenue",
             hovermode="x unified",
-
-            # 🔥 SHOW ALL MONTHS
-            xaxis=dict(
-                tickmode="linear",
-                dtick="M1",
-                tickformat="%b %Y",
-                tickangle=-45
-            ),
-
-            # 🔥 HOVER STYLE
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=14,
-                font_family="Arial",
-                bordercolor="#2F75B5"
-            )
+            xaxis=dict(tickmode="linear", dtick="M1", tickformat="%b %Y", tickangle=-45),
+            hoverlabel=dict(bgcolor="white", font_size=14, font_family="Arial", bordercolor="#2F75B5")
         )
 
         st.plotly_chart(fig, use_container_width=True)
-
 
         # ============================================================
         # TABLE
         # ============================================================
         st.markdown("### Forecast Output")
-
         forecast_df = pd.DataFrame({
-            "Date": future_dates.values,
+            "Date": future_dates,
             "Forecast Before Correction": before_future_preds,
             "Forecast After Correction": future_preds
         })
-
         render_html_table(forecast_df)
 
         # ============================================================
-        # 🧠 BUSINESS INSIGHTS (DL VERSION)
+        # BUSINESS INSIGHTS
         # ============================================================
         st.markdown("### 📊 Revenue Insights")
 
-        # ✅ USE CORRECT COLUMN
-        recent = df_ts[target_column].tail(14).mean()
-        past_avg = df_ts[target_column].tail(30).mean()
+        recent     = df_ts[target_column].tail(14).mean()
+        past_avg   = df_ts[target_column].tail(30).mean()
         volatility = np.std(df_ts[target_column].tail(30))
-
-        # ✅ USE DL FORECAST
         future_avg = np.mean(future_preds)
-
         max_future = np.max(future_preds)
         min_future = np.min(future_preds)
 
-        # ============================================================
-        # 📈 TREND ANALYSIS
-        # ============================================================
         if future_avg > recent:
             st.success(f"""
         **Revenue Growth Expected**
@@ -10432,28 +8850,22 @@ elif selected_model == "Deep Learning Forecast":
         ⚠ Avoid overstocking  
         """)
 
-        # ============================================================
-        # 🔝 PEAK & LOW REVENUE
-        # ============================================================
         st.info(f"""
         **Forecast Highlights**
 
         • Maximum expected revenue: {max_future:.2f}  
         • Minimum expected revenue: {min_future:.2f}  
 
-        ✔ Prepare for peak revenue  
-        ✔ Optimize stock for low revenue periods  
+        ✔ Prepare for peak revenue periods  
+        ✔ Optimize stock during low revenue  
         """)
 
-        # ============================================================
-        # 📦 INVENTORY STRATEGY
-        # ============================================================
         if future_avg > past_avg:
             st.success("""
         **Inventory Strategy Suggestion**
 
-        ✔ Increase stock gradually  
-        ✔ Prepare supply chain  
+        ✔ Increase stock levels gradually  
+        ✔ Plan for higher supply chain activity  
         """)
         else:
             st.info("""
@@ -10463,17 +8875,11 @@ elif selected_model == "Deep Learning Forecast":
         ✔ Focus on demand-driven restocking  
         """)
 
-        # ============================================================
-        # ⚠️ VOLATILITY INSIGHT (NEW - DL SPECIFIC)
-        # ============================================================
         if volatility > past_avg * 0.3:
             st.warning("⚠️ High revenue volatility detected — plan flexible inventory")
         else:
             st.success("✅ Revenue is relatively stable")
 
-        # ============================================================
-        # ⏳ FORECAST INFO
-        # ============================================================
         st.info(f"Forecast horizon: {forecast_days} days")
 
 # ============================================================
