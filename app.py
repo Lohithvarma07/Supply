@@ -12,7 +12,13 @@ from streamlit_option_menu import option_menu
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 st.set_page_config(page_title="SupplySyncAI – MLOps UI", layout="wide")
-
+st.markdown("""
+<style>
+body {
+    zoom: 0.8;
+}
+</style>
+""", unsafe_allow_html=True)
 st.markdown("""
 <style>
 
