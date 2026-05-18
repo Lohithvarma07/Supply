@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import mysql.connector
+import sqlite3
 import seaborn as sns
 import matplotlib.pyplot as plt
 import io
@@ -342,12 +342,13 @@ st.markdown(
 )
 
 
-# MYSQL LOADER FUNCTION
-@st.cache_data
-# CSV LOADER FUNCTION (DEPLOYMENT SAFE)
+# SQLITE LOADER FUNCTION
 @st.cache_data
 def load_data():
-    return pd.read_csv("data/fact_consolidated.csv")
+    conn = sqlite3.connect("database.db")
+    df = pd.read_sql("SELECT * FROM fact_consolidated", conn)
+    conn.close()
+    return df
 
 
 # CENTERED SMALL PLOT FUNCTION
@@ -430,7 +431,7 @@ if st.button("Load Data", key="load_data"):
     
     st.session_state.df = load_data()
     
-
+st.success("Database connected successfully ")
 
 
 # Show preview if loaded
