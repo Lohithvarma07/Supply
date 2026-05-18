@@ -421,33 +421,27 @@ st.markdown(
 )
 
 
-
 # Make sure session key exists
 if "df" not in st.session_state:
     st.session_state.df = None
 
 # Load Button
 if st.button("Load Data", key="load_data"):
-    
     st.session_state.df = load_data()
-    
-st.success("Database connected successfully ")
-
 
 # Show preview if loaded
 df = st.session_state.df
 
 if df is not None:
+    st.success("Database connected successfully ")
     st.markdown(
-    "<h3 style='color:#000000;'>Data Preview</h3>",
-    unsafe_allow_html=True
-)
-
+        "<h3 style='color:#000000;'>Data Preview</h3>",
+        unsafe_allow_html=True
+    )
     render_html_table(
         df.head(20),
         max_height=260
-    )   
-
+    )
     st.info(f"**Shape:** {df.shape[0]} rows × {df.shape[1]} columns")
 else:
     st.info("Click the button above to load the dataset.")
