@@ -4040,7 +4040,11 @@ st.write("")
 # ============================================================
 # SUPPLYSYNC ML IMPLEMENTATION
 # ============================================================
-
+# ML GATE – LOCKED UNTIL EDA IS DONE
+if not st.session_state.eda_completed:
+    st.warning("⚠️ Please complete at least one EDA step to unlock ML Implementation.")
+    st.stop()
+    
 import xgboost as xgb
 import plotly.graph_objects as go
 import pandas as pd
